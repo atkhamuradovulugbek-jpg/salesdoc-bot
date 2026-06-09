@@ -31,8 +31,10 @@ async def _evening_sync(app: Application) -> None:
         from bot import notify_admins
         await notify_admins(app, f"⚠️ <b>Sales Doctor xatosi (20:00):</b>\n<code>{result[:300]}</code>")
     else:
-        from bot import send_daily_digest
+        from bot import send_daily_digest, send_agent_cards_to_group
         await send_daily_digest(app)
+        # Har agent uchun guruhga hisobot kartochkasi
+        await send_agent_cards_to_group(app)
 
 
 def setup_scheduler(app: Application) -> None:

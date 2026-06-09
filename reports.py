@@ -29,6 +29,190 @@ MIN_DEBT = 50_000  # Eng kam qarz summasi (so'mda)
 SEP = "━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 
+# ------------------------------------------------------------------
+# Ish kuni hisoblagichi (Du-Sha = 6 kun, Yakshanba dam)
+# ------------------------------------------------------------------
+
+def workdays_in_month(year: int, month: int) -> int:
+    """Berilgan oydagi ish kunlari soni (Du-Sha). Yakshanba dam."""
+    if month == 12:
+        next_first = date(year + 1, 1, 1)
+    else:
+        next_first = date(year, month + 1, 1)
+    last_day = (next_first - timedelta(days=1)).day
+    count = 0
+    for d in range(1, last_day + 1):
+        # weekday(): Du=0, Sha=5, Ya=6
+        if date(year, month, d).weekday() != 6:
+            count += 1
+    return count
+
+
+def workdays_passed(year: int, month: int, today: date) -> int:
+    """Bugundan oldingi ish kunlari soni (bugun KIRMAYDI)."""
+    if today.year != year or today.month != month:
+        return workdays_in_month(year, month) if (year, month) < (today.year, today.month) else 0
+    count = 0
+    for d in range(1, today.day):  # today'ni qo'shmaydi
+        if date(year, month, d).weekday() != 6:
+            count += 1
+    return count
+
+
+def workdays_remaining(year: int, month: int, today: date) -> int:
+    """Bugundan to oy oxirigacha ish kunlari (bugun KIRADI)."""
+    return workdays_in_month(year, month) - workdays_passed(year, month, today)
+
+
+# ------------------------------------------------------------------
+# Status emoji / matn
+# ------------------------------------------------------------------
+
+def _perf_emoji(percent: float) -> str:
+    if percent < 50:
+        return "🔴"
+    if percent < 100:
+        return "🟡"
+    return "🟢"
+
+
+def _perf_label(percent: float, kind: str = "monthly") -> str:
+    """kind: monthly / prognoz / daily"""
+    if kind == "monthly":
+        if percent < 50:
+            return "🔴 <b>QIZIL HOLAT</b> — oylik plan past darajada. Savdo faolligini oshirish kerak."
+        if percent < 80:
+            return "🟡 <b>SARIQ HOLAT</b> — plan asta-sekin bajarilmoqda. Tezroq harakat qiling."
+        if percent < 100:
+            return "🟢 <b>YAXSHI</b> — plan bajarilish chizig'iga yaqin."
+        return "🚀 <b>SUPER NATIJA</b> — oylik plan oshirib bajarildi!"
+    if kind == "prognoz":
+        if percent < 70:
+            return "🔴 <b>OGOH PROGNOZ</b> — hozirgi temp bilan plan bajarilmasligi mumkin."
+        if percent < 100:
+            return "🟡 <b>O'RTACHA PROGNOZ</b> — tempni biroz oshirish kerak."
+        if percent < 110:
+            return "🟢 <b>YAXSHI PROGNOZ</b> — plan bajariladi."
+        return "🚀 <b>SUPER PROGNOZ</b> — oy oxirida plan oshirib bajariladi!"
+    # daily
+    if percent < 50:
+        return "🔴 <b>BUGUN PAST</b> — kunlik plan bajarilmadi."
+    if percent < 100:
+        return "🟡 <b>BUGUN O'RTACHA</b> — kunlik plan to'liq bajarilmadi."
+    if percent < 110:
+        return "🟢 <b>BUGUN YAXSHI</b> — kunlik plan bajarildi."
+    return "🚀 <b>SUPER NATIJA</b> — bugungi plan oshirib bajarildi!"
+
+
+def agent_report_card(agent_sd_id: str) -> str | None:
+    """Bitta agent uchun oylik/kunlik hisobot kartochkasi (rasm formatiga o'xshash)."""
+    today = date.today()
+    year, month = today.year, today.month
+    month_first = f"{year:04d}-{month:02d}-01"
+    today_iso = today.isoformat()
+
+    month_names_uz = ["", "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
+                      "Iyul", "Avgust", "Sentyabr", "Oktyabr", "Noyabr", "Dekabr"]
+
+    with get_conn() as conn:
+        agent = conn.execute("SELECT sd_id, name FROM agents WHERE sd_id=?", (agent_sd_id,)).fetchone()
+        if not agent:
+            return None
+        plan_row = conn.execute("SELECT sales_plan, visit_plan FROM agent_plans WHERE agent_sd_id=?", (agent_sd_id,)).fetchone()
+        sales_plan = float(plan_row["sales_plan"] or 0) if plan_row else 0
+        visit_plan = int(plan_row["visit_plan"] or 0) if plan_row else 0
+
+        # Oylik savdo
+        sales_row = conn.execute("""
+            SELECT COALESCE(SUM(total_after_discount), 0) AS s
+            FROM orders WHERE agent_sd_id=? AND date >= ? AND date <= ? AND status IN (1,2,3)
+        """, (agent_sd_id, month_first, today_iso)).fetchone()
+        sales_done = float(sales_row["s"] or 0)
+
+        # Bugungi savdo
+        today_row = conn.execute("""
+            SELECT COALESCE(SUM(total_after_discount), 0) AS s
+            FROM orders WHERE agent_sd_id=? AND date=? AND status IN (1,2,3)
+        """, (agent_sd_id, today_iso)).fetchone()
+        today_sales = float(today_row["s"] or 0)
+
+        # Oylik vizitlar
+        visit_row = conn.execute("""
+            SELECT COUNT(*) AS c FROM visits
+            WHERE agent_sd_id=? AND date >= ? AND date <= ? AND visited=1
+        """, (agent_sd_id, month_first, today_iso)).fetchone()
+        visits_done = int(visit_row["c"] or 0)
+
+        # Bugungi vizitlar
+        today_visit_row = conn.execute("""
+            SELECT COUNT(*) AS c FROM visits
+            WHERE agent_sd_id=? AND date=? AND visited=1
+        """, (agent_sd_id, today_iso)).fetchone()
+        today_visits = int(today_visit_row["c"] or 0)
+
+    total_wd = workdays_in_month(year, month)
+    passed_wd = workdays_passed(year, month, today)
+    remaining_wd = workdays_remaining(year, month, today)
+
+    # Hisoblar
+    plan_pct = (sales_done / sales_plan * 100) if sales_plan > 0 else 0
+    plan_remaining = max(sales_plan - sales_done, 0)
+    daily_avg = sales_done / passed_wd if passed_wd > 0 else 0
+    prognoz = daily_avg * total_wd
+    prognoz_pct = (prognoz / sales_plan * 100) if sales_plan > 0 else 0
+    daily_required = (plan_remaining / remaining_wd) if remaining_wd > 0 else 0
+    daily_pct = (today_sales / daily_required * 100) if daily_required > 0 else 0
+
+    # Vizit
+    visit_remaining = max(visit_plan - visits_done, 0)
+    visit_daily_required = (visit_remaining / remaining_wd) if remaining_wd > 0 else 0
+    visit_pct = (visits_done / visit_plan * 100) if visit_plan > 0 else 0
+
+    # Matn yig'ish
+    lines = []
+    lines.append(SEP)
+    lines.append(f"👤 <b>{agent['name']}</b>")
+    lines.append(f"📅 {today.strftime('%d.%m.%Y')} · {month_names_uz[month]}")
+    lines.append(SEP)
+    lines.append("")
+    if sales_plan == 0:
+        lines.append("⚠️ <i>Bu agent uchun oylik plan o'rnatilmagan!</i>")
+        lines.append("<i>Bot menyusidan «📊 Agent planlari» orqali kiriting.</i>")
+        lines.append("")
+    lines.append(f"🎯 <b>OYLIK PLAN:</b> {_fmt(sales_plan)}")
+    lines.append(f"✅ Bajardi: <b>{_fmt(sales_done)}</b>  ({plan_pct:.0f}%)")
+    lines.append(f"📍 Qoldi: {_fmt(plan_remaining)}")
+    if sales_plan > 0:
+        lines.append(f"🔮 Prognoz: {_fmt(prognoz)}  ({prognoz_pct:.0f}%)")
+        lines.append(f"   {_perf_label(prognoz_pct, 'prognoz')}")
+    lines.append("")
+    lines.append(f"📆 Ish kuni: <b>{total_wd}</b> ta  ·  ishladi: {passed_wd}  ·  qoldi: {remaining_wd}")
+    lines.append("")
+    lines.append(SEP)
+    lines.append("📈 <b>BUGUNGI KUN</b>")
+    lines.append(SEP)
+    lines.append(f"🎯 Kerak: {_fmt(daily_required)}")
+    lines.append(f"💵 Bajarildi: <b>{_fmt(today_sales)}</b>" + (f"  ({daily_pct:.0f}%)" if daily_required > 0 else ""))
+    if daily_required > 0:
+        lines.append(f"   {_perf_label(daily_pct, 'daily')}")
+    lines.append("")
+    lines.append(SEP)
+    lines.append("🚶 <b>VIZITLAR</b>")
+    lines.append(SEP)
+    if visit_plan > 0:
+        lines.append(f"🎯 Oylik plan: <b>{visit_plan}</b> ta  ({visit_pct:.0f}%)")
+        lines.append(f"✅ Bajarildi: {visits_done} ta  ·  qoldi: {visit_remaining} ta")
+        lines.append(f"📅 Kunlik kerak: <b>{visit_daily_required:.0f}</b> ta")
+        lines.append(f"📅 Bugun bajarildi: <b>{today_visits}</b> ta")
+    else:
+        lines.append(f"✅ Bugun: <b>{today_visits}</b> ta tashrif")
+        lines.append(f"📊 Oy davomida: {visits_done} ta")
+        lines.append("<i>Vizit plani o'rnatilmagan.</i>")
+
+    return "\n".join(lines)
+
+
+
 def _header(emoji: str, title: str, subtitle: str = "") -> str:
     parts = [SEP, f"{emoji} <b>{title}</b>"]
     if subtitle:

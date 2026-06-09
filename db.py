@@ -114,6 +114,13 @@ def init_db() -> None:
                 active      TEXT,
                 updated_at  TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS agent_plans (
+                agent_sd_id   TEXT PRIMARY KEY,
+                sales_plan    REAL DEFAULT 0,
+                visit_plan    INTEGER DEFAULT 0,
+                updated_at    TEXT
+            );
         """)
 
 

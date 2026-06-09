@@ -54,8 +54,44 @@ MAIN_MENU_KEYBOARD = InlineKeyboardMarkup([
      InlineKeyboardButton("🏆 TOP tovarlar", callback_data="menu:top_products")],
     [InlineKeyboardButton("📦 Sklad ostatka", callback_data="menu:stock"),
      InlineKeyboardButton("💀 O'lik do'konlar", callback_data="menu:dead_outlets")],
+    [InlineKeyboardButton("📊 Agent planlari", callback_data="menu:plans"),
+     InlineKeyboardButton("📤 Guruh sozlash", callback_data="menu:groupset")],
     [InlineKeyboardButton("🔄 Hozir yangilash", callback_data="menu:sync_now")],
 ])
+
+
+async def setgroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Guruh ichida ishlatilsa — shu guruh ID'sini saqlaydi."""
+    if not is_allowed(update.effective_user.id):
+        await deny(update)
+        return
+    chat = update.effective_chat
+    if chat.type not in ("group", "supergroup"):
+        await update.message.reply_text(
+            "⚠️ Bu buyruq faqat <b>guruh</b> ichida ishlaydi.\n\n"
+            "1. Avval botni guruhga qo'shing\n"
+            "2. Guruh ichida <code>/setgroup</code> yozing",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    with get_conn() as conn:
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ("report_chat_id", str(chat.id)))
+    await update.message.reply_text(
+        f"✅ <b>Bu guruh saqlandi!</b>\n\n"
+        f"Guruh: <code>{chat.title}</code>\n"
+        f"ID: <code>{chat.id}</code>\n\n"
+        f"Endi har kuni 20:00 da bot bu guruhga har agent uchun hisobot yuboradi.",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+async def cleargroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not is_allowed(update.effective_user.id):
+        await deny(update)
+        return
+    with get_conn() as conn:
+        conn.execute("DELETE FROM settings WHERE key='report_chat_id'")
+    await update.message.reply_text("✅ Guruh sozlamasi o'chirildi. Endi hisobot yuborilmaydi.")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -239,6 +275,98 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "💀 <b>O'lik do'konlar</b>\nNecha kundan beri buyurtma yo'qlarni ko'rmoqchisiz?",
             parse_mode=ParseMode.HTML,
             reply_markup=dead_picker_keyboard(),
+        )
+        return
+
+    # --- Agent planlari ---
+    if data == "menu:plans":
+        with get_conn() as conn:
+            agents = conn.execute("""
+                SELECT a.sd_id, a.name,
+                       COALESCE(p.sales_plan, 0) AS sp,
+                       COALESCE(p.visit_plan, 0) AS vp
+                FROM agents a
+                LEFT JOIN agent_plans p ON p.agent_sd_id = a.sd_id
+                WHERE a.active='Y'
+                ORDER BY a.name
+            """).fetchall()
+        buttons = []
+        for a in agents:
+            mark = "✅" if a["sp"] > 0 else "⚠️"
+            buttons.append([InlineKeyboardButton(
+                f"{mark} {a['name']}",
+                callback_data=f"planedit:{a['sd_id']}"
+            )])
+        buttons.append([InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")])
+        await query.message.edit_text(
+            "📊 <b>Agent planlari</b>\n\n"
+            "Plan o'rnatish uchun agent tanlang.\n"
+            "✅ = plan o'rnatilgan, ⚠️ = o'rnatilmagan",
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+        return
+
+    if data.startswith("planedit:"):
+        agent_id = data.split(":", 1)[1]
+        with get_conn() as conn:
+            a = conn.execute("SELECT name FROM agents WHERE sd_id=?", (agent_id,)).fetchone()
+            p = conn.execute("SELECT sales_plan, visit_plan FROM agent_plans WHERE agent_sd_id=?", (agent_id,)).fetchone()
+        sp = float(p["sales_plan"]) if p else 0
+        vp = int(p["visit_plan"]) if p else 0
+        await query.message.edit_text(
+            f"👤 <b>{a['name']}</b>\n\n"
+            f"💵 Oylik savdo plani: <b>{int(sp):,} so'm</b>\n".replace(",", " ") +
+            f"🚶 Oylik vizit plani: <b>{vp}</b> ta\n\n"
+            "Qaysisini o'zgartirasiz?",
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("💵 Savdo plani", callback_data=f"setsales:{agent_id}")],
+                [InlineKeyboardButton("🚶 Vizit plani", callback_data=f"setvisit:{agent_id}")],
+                [InlineKeyboardButton("◀️ Orqaga", callback_data="menu:plans")],
+            ]),
+        )
+        return
+
+    if data.startswith("setsales:"):
+        agent_id = data.split(":", 1)[1]
+        context.user_data["waiting_for"] = f"sales_plan:{agent_id}"
+        await query.message.edit_text(
+            "💵 <b>Oylik savdo planini yozing:</b>\n\n"
+            "Misol: <code>50000000</code> (50 mln so'm uchun)\n"
+            "yoki: <code>50 000 000</code>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Bekor qilish", callback_data=f"planedit:{agent_id}")]]),
+        )
+        return
+
+    if data.startswith("setvisit:"):
+        agent_id = data.split(":", 1)[1]
+        context.user_data["waiting_for"] = f"visit_plan:{agent_id}"
+        await query.message.edit_text(
+            "🚶 <b>Oylik vizit planini yozing:</b>\n\n"
+            "Misol: <code>750</code>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Bekor qilish", callback_data=f"planedit:{agent_id}")]]),
+        )
+        return
+
+    # --- Guruh sozlash ---
+    if data == "menu:groupset":
+        with get_conn() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key='report_chat_id'").fetchone()
+        current = row["value"] if row else "o'rnatilmagan"
+        await query.message.edit_text(
+            "📤 <b>Guruh sozlash</b>\n\n"
+            "Bot 20:00 da har agent uchun alohida hisobot yuboradi.\n\n"
+            f"<b>Hozirgi guruh ID:</b> <code>{current}</code>\n\n"
+            "<b>Qanday sozlash:</b>\n"
+            "1️⃣ Botni guruhga qo'shing (admin sifatida)\n"
+            "2️⃣ Guruhga shu xabarni yozing: <code>/setgroup</code>\n"
+            "3️⃣ Bot o'sha guruhni saqlaydi va 20:00 da hisobot yuboradi\n\n"
+            "<i>Yoki bu guruhdan o'chirish uchun bu yerda yozing:</i> <code>/cleargroup</code>",
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
         )
         return
 
@@ -441,8 +569,57 @@ async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await deny(update)
         return
 
-    waiting = context.user_data.get("waiting_for")
-    if waiting:
+    waiting = context.user_data.get("waiting_for") or ""
+
+    # Plan o'rnatish (savdo)
+    if waiting.startswith("sales_plan:"):
+        agent_id = waiting.split(":", 1)[1]
+        try:
+            value = float(update.message.text.replace(" ", "").replace(",", "").replace(".", ""))
+        except ValueError:
+            await update.message.reply_text("⚠️ Faqat raqam yozing. Misol: <code>50000000</code>", parse_mode=ParseMode.HTML)
+            return
+        with get_conn() as conn:
+            from datetime import datetime
+            now = datetime.now().isoformat(timespec="seconds")
+            conn.execute("""
+                INSERT INTO agent_plans (agent_sd_id, sales_plan, visit_plan, updated_at)
+                VALUES (?, ?, COALESCE((SELECT visit_plan FROM agent_plans WHERE agent_sd_id=?), 0), ?)
+                ON CONFLICT(agent_sd_id) DO UPDATE SET sales_plan=excluded.sales_plan, updated_at=excluded.updated_at
+            """, (agent_id, value, agent_id, now))
+        context.user_data["waiting_for"] = None
+        await update.message.reply_text(
+            f"✅ Savdo plani saqlandi: <b>{int(value):,} so'm</b>".replace(",", " "),
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Planlar ro'yxati", callback_data="menu:plans")]]),
+        )
+        return
+
+    # Plan o'rnatish (vizit)
+    if waiting.startswith("visit_plan:"):
+        agent_id = waiting.split(":", 1)[1]
+        try:
+            value = int(update.message.text.replace(" ", "").replace(",", ""))
+        except ValueError:
+            await update.message.reply_text("⚠️ Faqat raqam yozing. Misol: <code>750</code>", parse_mode=ParseMode.HTML)
+            return
+        with get_conn() as conn:
+            from datetime import datetime
+            now = datetime.now().isoformat(timespec="seconds")
+            conn.execute("""
+                INSERT INTO agent_plans (agent_sd_id, sales_plan, visit_plan, updated_at)
+                VALUES (?, COALESCE((SELECT sales_plan FROM agent_plans WHERE agent_sd_id=?), 0), ?, ?)
+                ON CONFLICT(agent_sd_id) DO UPDATE SET visit_plan=excluded.visit_plan, updated_at=excluded.updated_at
+            """, (agent_id, agent_id, value, now))
+        context.user_data["waiting_for"] = None
+        await update.message.reply_text(
+            f"✅ Vizit plani saqlandi: <b>{value}</b> ta",
+            parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Planlar ro'yxati", callback_data="menu:plans")]]),
+        )
+        return
+
+    if waiting in ("dsales", "visits", "topprods"):
         # Foydalanuvchi sana kiritdi
         d_from, d_to = parse_date_input(update.message.text)
         if not d_from:
@@ -488,6 +665,32 @@ async def send_daily_digest(app: Application) -> None:
             logger.error("Digest yuborishda xato (user %s): %s", admin_id, exc)
 
 
+async def send_agent_cards_to_group(app: Application) -> None:
+    """Har faol agent uchun hisobot kartochkasini guruhga yuboradi (20:00 da)."""
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key='report_chat_id'").fetchone()
+        if not row or not row["value"]:
+            logger.info("Guruh sozlanmagan — agent kartochkalari yuborilmadi.")
+            return
+        chat_id = int(row["value"])
+        agents = conn.execute(
+            "SELECT sd_id, name FROM agents WHERE active='Y' ORDER BY name"
+        ).fetchall()
+
+    sent = 0
+    for a in agents:
+        text = reports.agent_report_card(a["sd_id"])
+        if not text:
+            continue
+        try:
+            await app.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
+            sent += 1
+            await asyncio.sleep(0.5)  # Telegram rate-limit (30 msg/sek)
+        except Exception as exc:
+            logger.error("Agent kartochkasi yuborishda xato (%s): %s", a["name"], exc)
+    logger.info("✓ Guruhga %d ta agent kartochkasi yuborildi", sent)
+
+
 async def notify_admins(app: Application, text: str) -> None:
     for admin_id in ADMIN_IDS:
         try:
@@ -517,6 +720,8 @@ def main() -> None:
     )
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("setgroup", setgroup_cmd))
+    app.add_handler(CommandHandler("cleargroup", cleargroup_cmd))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_message))
 
