@@ -33,6 +33,12 @@ SEP = "━━━━━━━━━━━━━━━━━━━━━━━━�
 # Agent klassifikatsiyasi: shahar / viloyat
 # ------------------------------------------------------------------
 
+# Standart oylik planlar (agent uchun maxsus belgilanmagan bo'lsa)
+DEFAULT_CITY_SALES_PLAN = 50_000_000   # so'm — shahar agentlar
+DEFAULT_REGION_SALES_PLAN = 60_000_000  # so'm — viloyat agentlar
+DEFAULT_VISIT_PLAN = 750                # hammaga
+
+
 CITY_AREAS = {
     "chilonzor", "olmazor", "uchtepa", "shayhontohur", "yunusobod",
     "yashnabod", "bektemir", "sergeli", "yangihayot",
@@ -157,6 +163,18 @@ def agent_report_card(agent_sd_id: str, index: int = None, total: int = None) ->
         sales_plan = float(plan_row["sales_plan"] or 0) if plan_row else 0
         visit_plan = int(plan_row["visit_plan"] or 0) if plan_row else 0
 
+    # Standart planlar (agent uchun maxsus belgilanmagan bo'lsa)
+    if sales_plan <= 0:
+        kind = classify_agent(agent["name"])
+        if kind == "city":
+            sales_plan = DEFAULT_CITY_SALES_PLAN
+        elif kind == "region":
+            sales_plan = DEFAULT_REGION_SALES_PLAN
+    if visit_plan <= 0:
+        visit_plan = DEFAULT_VISIT_PLAN
+
+    with get_conn() as conn:
+
         # Oylik savdo
         sales_row = conn.execute("""
             SELECT COALESCE(SUM(total_after_discount), 0) AS s
@@ -213,10 +231,6 @@ def agent_report_card(agent_sd_id: str, index: int = None, total: int = None) ->
     lines.append(f"📅 {today.strftime('%d.%m.%Y')} · {month_names_uz[month]}")
     lines.append(CARD_BORDER)
     lines.append("")
-    if sales_plan == 0:
-        lines.append("⚠️ <i>Bu agent uchun oylik plan o'rnatilmagan!</i>")
-        lines.append("<i>Bot menyusidan «📊 Agent planlari» orqali kiriting.</i>")
-        lines.append("")
     lines.append(f"🎯 <b>OYLIK PLAN:</b> {_fmt(sales_plan)}")
     lines.append(f"✅ Bajardi: <b>{_fmt(sales_done)}</b>  ({plan_pct:.0f}%)")
     lines.append(f"📍 Qoldi: {_fmt(plan_remaining)}")

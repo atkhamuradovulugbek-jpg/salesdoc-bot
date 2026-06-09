@@ -292,7 +292,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             """).fetchall()
         buttons = []
         for a in agents:
-            mark = "✅" if a["sp"] > 0 else "⚠️"
+            mark = "✏️" if a["sp"] > 0 else "📌"  # ✏️ = qo'lda o'zgartirilgan, 📌 = default
             buttons.append([InlineKeyboardButton(
                 f"{mark} {a['name']}",
                 callback_data=f"planedit:{a['sd_id']}"
@@ -300,8 +300,13 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         buttons.append([InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")])
         await query.message.edit_text(
             "📊 <b>Agent planlari</b>\n\n"
-            "Plan o'rnatish uchun agent tanlang.\n"
-            "✅ = plan o'rnatilgan, ⚠️ = o'rnatilmagan",
+            f"<b>Standart planlar (avtomatik):</b>\n"
+            f"🏙️ Shahar: <b>{reports.DEFAULT_CITY_SALES_PLAN:,}</b> so'm\n".replace(",", " ") +
+            f"🏘️ Viloyat: <b>{reports.DEFAULT_REGION_SALES_PLAN:,}</b> so'm\n".replace(",", " ") +
+            f"🚶 Vizit (hamma): <b>{reports.DEFAULT_VISIT_PLAN}</b> ta\n\n"
+            "📌 = standart plan ishlatiladi\n"
+            "✏️ = qo'lda o'zgartirilgan\n\n"
+            "Bitta agentni boshqacha qilmoqchi bo'lsangiz, tanlang:",
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup(buttons),
         )
@@ -314,10 +319,26 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             p = conn.execute("SELECT sales_plan, visit_plan FROM agent_plans WHERE agent_sd_id=?", (agent_id,)).fetchone()
         sp = float(p["sales_plan"]) if p else 0
         vp = int(p["visit_plan"]) if p else 0
+        # Defaultlarni ko'rsatamiz agar maxsus yo'q bo'lsa
+        if sp <= 0:
+            kind = reports.classify_agent(a["name"])
+            if kind == "city":
+                sp_display = reports.DEFAULT_CITY_SALES_PLAN
+            elif kind == "region":
+                sp_display = reports.DEFAULT_REGION_SALES_PLAN
+            else:
+                sp_display = 0
+            sp_note = "  <i>(standart)</i>"
+        else:
+            sp_display = sp
+            sp_note = "  <i>(qo'lda o'rnatilgan)</i>"
+        vp_display = vp if vp > 0 else reports.DEFAULT_VISIT_PLAN
+        vp_note = "  <i>(qo'lda)</i>" if vp > 0 else "  <i>(standart)</i>"
+
         await query.message.edit_text(
             f"👤 <b>{a['name']}</b>\n\n"
-            f"💵 Oylik savdo plani: <b>{int(sp):,} so'm</b>\n".replace(",", " ") +
-            f"🚶 Oylik vizit plani: <b>{vp}</b> ta\n\n"
+            f"💵 Oylik savdo: <b>{int(sp_display):,} so'm</b>{sp_note}\n".replace(",", " ") +
+            f"🚶 Oylik vizit: <b>{vp_display}</b> ta{vp_note}\n\n"
             "Qaysisini o'zgartirasiz?",
             parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([

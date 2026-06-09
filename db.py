@@ -3,10 +3,17 @@ db.py — SQLite ma'lumotlar bazasi.
 Barcha jadvallar shu yerda yaratiladi.
 """
 
+import os
 import sqlite3
 from pathlib import Path
 
-DB_PATH = Path(__file__).parent / "bot.db"
+# Railway'da DATA_DIR=/app/data (persistent volume). Lokalda fayl yonida.
+_data_dir = os.getenv("DATA_DIR")
+if _data_dir:
+    Path(_data_dir).mkdir(parents=True, exist_ok=True)
+    DB_PATH = Path(_data_dir) / "bot.db"
+else:
+    DB_PATH = Path(__file__).parent / "bot.db"
 
 
 def get_conn() -> sqlite3.Connection:
