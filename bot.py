@@ -727,8 +727,9 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
         except Exception as exc:
             logger.error("Section header yuborishda xato: %s", exc)
         cnt = 0
-        for a in group:
-            text = reports.agent_report_card(a["sd_id"])
+        total = len(group)
+        for i, a in enumerate(group, 1):
+            text = reports.agent_report_card(a["sd_id"], index=i, total=total)
             if not text:
                 continue
             try:

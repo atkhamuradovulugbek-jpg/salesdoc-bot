@@ -136,7 +136,10 @@ def _perf_label(percent: float, kind: str = "monthly") -> str:
     return "🚀 <b>SUPER NATIJA</b> — bugungi plan oshirib bajarildi!"
 
 
-def agent_report_card(agent_sd_id: str) -> str | None:
+CARD_BORDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+
+
+def agent_report_card(agent_sd_id: str, index: int = None, total: int = None) -> str | None:
     """Bitta agent uchun oylik/kunlik hisobot kartochkasi (rasm formatiga o'xshash)."""
     today = date.today()
     year, month = today.year, today.month
@@ -202,10 +205,13 @@ def agent_report_card(agent_sd_id: str) -> str | None:
 
     # Matn yig'ish
     lines = []
-    lines.append(SEP)
-    lines.append(f"👤 <b>{agent['name']}</b>")
+    lines.append(CARD_BORDER)
+    if index and total:
+        lines.append(f"📋 <b>{index}/{total}</b>  ·  👤 <b>{agent['name']}</b>")
+    else:
+        lines.append(f"👤 <b>{agent['name']}</b>")
     lines.append(f"📅 {today.strftime('%d.%m.%Y')} · {month_names_uz[month]}")
-    lines.append(SEP)
+    lines.append(CARD_BORDER)
     lines.append("")
     if sales_plan == 0:
         lines.append("⚠️ <i>Bu agent uchun oylik plan o'rnatilmagan!</i>")
@@ -240,6 +246,10 @@ def agent_report_card(agent_sd_id: str) -> str | None:
         lines.append(f"✅ Bugun: <b>{today_visits}</b> ta tashrif")
         lines.append(f"📊 Oy davomida: {visits_done} ta")
         lines.append("<i>Vizit plani o'rnatilmagan.</i>")
+
+    # Pastki yakuniy ramka — kartochkalar ajralib turishi uchun
+    lines.append("")
+    lines.append(CARD_BORDER)
 
     return "\n".join(lines)
 
