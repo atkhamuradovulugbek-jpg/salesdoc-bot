@@ -30,6 +30,38 @@ SEP = "━━━━━━━━━━━━━━━━━━━━━━━━�
 
 
 # ------------------------------------------------------------------
+# Agent klassifikatsiyasi: shahar / viloyat
+# ------------------------------------------------------------------
+
+CITY_AREAS = {
+    "chilonzor", "olmazor", "uchtepa", "shayhontohur", "yunusobod",
+    "yashnabod", "bektemir", "sergeli", "yangihayot",
+    "mirzo ulugbek", "mirzo ulug bek", "mirobod", "yakkasaroy",
+}
+
+REGION_AREAS = {
+    "chinoz", "chirchiq", "yangiyol", "yangiyo l", "toytepa", "to ytepa",
+    "bekobod", "boka", "bo ka", "piskent", "angren", "ohangaron",
+    "yangibozor", "yangibazor", "qibray", "zangiota", "olmaliq",
+    "bostonliq", "bo stonliq", "keles", "oqqurgon", "oqqurg on",
+    "quyi chirchiq", "parkent",
+}
+
+
+def classify_agent(name: str) -> str:
+    """Returns 'city', 'region', or 'unknown'."""
+    lower = name.lower().replace("'", " ").replace("`", " ").replace("ʼ", " ")
+    # Apostroflar va maxsus belgilarni bo'sh joyga aylantiramiz
+    for area in REGION_AREAS:
+        if area in lower:
+            return "region"
+    for area in CITY_AREAS:
+        if area in lower:
+            return "city"
+    return "unknown"
+
+
+# ------------------------------------------------------------------
 # Ish kuni hisoblagichi (Du-Sha = 6 kun, Yakshanba dam)
 # ------------------------------------------------------------------
 

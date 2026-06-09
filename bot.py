@@ -356,16 +356,39 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         with get_conn() as conn:
             row = conn.execute("SELECT value FROM settings WHERE key='report_chat_id'").fetchone()
         current = row["value"] if row else "o'rnatilmagan"
+        is_set = bool(row and row["value"])
+        buttons = []
+        if is_set:
+            buttons.append([InlineKeyboardButton("🚀 Hozir sinash (guruhga yuborish)", callback_data="testsend")])
+        buttons.append([InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")])
         await query.message.edit_text(
             "📤 <b>Guruh sozlash</b>\n\n"
-            "Bot 20:00 da har agent uchun alohida hisobot yuboradi.\n\n"
+            "Bot har kuni 20:00 da har faol agent uchun alohida hisobot yuboradi.\n"
+            "Hisobotlar shahar va viloyat bo'yicha ajratiladi.\n\n"
             f"<b>Hozirgi guruh ID:</b> <code>{current}</code>\n\n"
             "<b>Qanday sozlash:</b>\n"
             "1️⃣ Botni guruhga qo'shing (admin sifatida)\n"
-            "2️⃣ Guruhga shu xabarni yozing: <code>/setgroup</code>\n"
-            "3️⃣ Bot o'sha guruhni saqlaydi va 20:00 da hisobot yuboradi\n\n"
-            "<i>Yoki bu guruhdan o'chirish uchun bu yerda yozing:</i> <code>/cleargroup</code>",
+            "2️⃣ Guruh ichida yozing: <code>/setgroup</code>\n"
+            "3️⃣ Bot saqlaydi va 20:00 da yuboradi\n\n"
+            "<i>O'chirish uchun guruhda:</i> <code>/cleargroup</code>",
             parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(buttons),
+        )
+        return
+
+    # --- Hozir sinash (qo'lda guruhga yuborish) ---
+    if data == "testsend":
+        await query.message.edit_text(
+            "🚀 <b>Hozir guruhga yuborilmoqda...</b>\n<i>17-18 ta agent uchun ~30 sekund.</i>",
+            parse_mode=ParseMode.HTML,
+        )
+        try:
+            sent = await send_agent_cards_to_group(context.application)
+            txt = f"✅ <b>Yuborildi!</b>\nJami: <b>{sent}</b> ta agent kartochkasi"
+        except Exception as exc:
+            txt = f"⚠️ <b>Xato:</b>\n<code>{str(exc)[:300]}</code>"
+        await query.message.edit_text(
+            txt, parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
         )
         return
@@ -665,30 +688,72 @@ async def send_daily_digest(app: Application) -> None:
             logger.error("Digest yuborishda xato (user %s): %s", admin_id, exc)
 
 
-async def send_agent_cards_to_group(app: Application) -> None:
-    """Har faol agent uchun hisobot kartochkasini guruhga yuboradi (20:00 da)."""
+async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> int:
+    """Har faol agent uchun hisobot kartochkasini guruhga yuboradi.
+    Shahar agentlari va viloyat agentlari alohida guruhlanadi."""
+    if chat_id is None:
+        with get_conn() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key='report_chat_id'").fetchone()
+            if not row or not row["value"]:
+                logger.info("Guruh sozlanmagan — agent kartochkalari yuborilmadi.")
+                return 0
+            chat_id = int(row["value"])
+
     with get_conn() as conn:
-        row = conn.execute("SELECT value FROM settings WHERE key='report_chat_id'").fetchone()
-        if not row or not row["value"]:
-            logger.info("Guruh sozlanmagan — agent kartochkalari yuborilmadi.")
-            return
-        chat_id = int(row["value"])
         agents = conn.execute(
             "SELECT sd_id, name FROM agents WHERE active='Y' ORDER BY name"
         ).fetchall()
 
-    sent = 0
+    city_agents = []
+    region_agents = []
+    other_agents = []
     for a in agents:
-        text = reports.agent_report_card(a["sd_id"])
-        if not text:
-            continue
+        kind = reports.classify_agent(a["name"])
+        if kind == "city":
+            city_agents.append(a)
+        elif kind == "region":
+            region_agents.append(a)
+        else:
+            other_agents.append(a)
+
+    today_str = date.today().strftime("%d.%m.%Y")
+    sent = 0
+
+    async def send_section(header: str, group: list) -> int:
+        if not group:
+            return 0
         try:
-            await app.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
-            sent += 1
-            await asyncio.sleep(0.5)  # Telegram rate-limit (30 msg/sek)
+            await app.bot.send_message(chat_id, header, parse_mode=ParseMode.HTML)
         except Exception as exc:
-            logger.error("Agent kartochkasi yuborishda xato (%s): %s", a["name"], exc)
+            logger.error("Section header yuborishda xato: %s", exc)
+        cnt = 0
+        for a in group:
+            text = reports.agent_report_card(a["sd_id"])
+            if not text:
+                continue
+            try:
+                await app.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
+                cnt += 1
+                await asyncio.sleep(0.5)
+            except Exception as exc:
+                logger.error("Kartochka yuborishda xato (%s): %s", a["name"], exc)
+        return cnt
+
+    sent += await send_section(
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏙️ <b>SHAHAR AGENTLARI</b>\n📅 {today_str}\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        city_agents,
+    )
+    sent += await send_section(
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏘️ <b>VILOYAT AGENTLARI</b>\n📅 {today_str}\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        region_agents,
+    )
+    if other_agents:
+        sent += await send_section(
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━\n❓ <b>BOSHQA AGENTLAR</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
+            other_agents,
+        )
     logger.info("✓ Guruhga %d ta agent kartochkasi yuborildi", sent)
+    return sent
 
 
 async def notify_admins(app: Application, text: str) -> None:
