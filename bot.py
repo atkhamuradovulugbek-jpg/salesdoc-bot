@@ -48,8 +48,8 @@ async def deny(update: Update) -> None:
 MAIN_MENU_KEYBOARD = InlineKeyboardMarkup([
     [InlineKeyboardButton("💰 Kunlik savdo", callback_data="menu:daily_sales"),
      InlineKeyboardButton("📈 Oylik savdo", callback_data="menu:monthly_sales")],
-    [InlineKeyboardButton("🏪 Agentlar qarzi", callback_data="menu:agents_debt"),
-     InlineKeyboardButton("👤 Agentni ochish", callback_data="menu:agent_detail")],
+    [InlineKeyboardButton("💸 Qarzdorliklar jami", callback_data="menu:agents_debt"),
+     InlineKeyboardButton("👤 Qarzdorlik Agentlar", callback_data="menu:agent_detail")],
     [InlineKeyboardButton("🚶 Vizitlar", callback_data="menu:visits"),
      InlineKeyboardButton("🏆 TOP tovarlar", callback_data="menu:top_products")],
     [InlineKeyboardButton("📦 Sklad ostatka", callback_data="menu:stock"),
@@ -63,7 +63,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await deny(update)
         return
     await update.message.reply_text(
-        "👋 <b>SalesDoc monitoring botiga xush kelibsiz!</b>\n\nQuyidagi bo'limlardan birini tanlang:",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "👋 <b>SalesDoc Monitoring Bot</b>\n"
+        "<i>Shiribom uchun ichki tizim</i>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "📊 Bo'limni tanlang 👇",
         parse_mode=ParseMode.HTML,
         reply_markup=MAIN_MENU_KEYBOARD,
     )
@@ -72,6 +76,37 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def show_main_menu(update: Update, text: str = "Bosh menyu:") -> None:
     await update.effective_message.edit_text(
         text, parse_mode=ParseMode.HTML, reply_markup=MAIN_MENU_KEYBOARD
+    )
+
+
+MAX_TG = 4000  # xavfsiz chegara (asl: 4096)
+
+
+def _month_range(year: int, month: int) -> tuple[str, str]:
+    """(YYYY-MM-01, YYYY-MM-DD) — oyning birinchi va oxirgi kuni."""
+    d_from = f"{year:04d}-{month:02d}-01"
+    if month == 12:
+        next_first = date(year + 1, 1, 1)
+    else:
+        next_first = date(year, month + 1, 1)
+    d_to = (next_first - timedelta(days=1)).isoformat()
+    return d_from, d_to
+
+
+def _truncate(text: str) -> str:
+    """Telegram chegarasidan oshsa, oxiriga ogohlantirish qo'shadi."""
+    if len(text) <= MAX_TG:
+        return text
+    cut = text[:MAX_TG - 100].rsplit("\n", 1)[0]
+    return cut + "\n\n<i>...xabar uzun bo'lgani uchun qisqartirildi.</i>"
+
+
+async def send_report(query, text: str, back_to: str = "back:main") -> None:
+    """Hisobotni xavfsiz uzunlikda yuboradi."""
+    safe = _truncate(text)
+    await query.message.edit_text(
+        safe, parse_mode=ParseMode.HTML,
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data=back_to)]]),
     )
 
 
@@ -90,6 +125,7 @@ def date_picker_keyboard(prefix: str, back: str = "back:main") -> InlineKeyboard
          InlineKeyboardButton("📅 Kecha", callback_data=f"{prefix}:{yesterday.isoformat()}")],
         [InlineKeyboardButton("🗓 Bu oy", callback_data=f"{prefix}:month:{today.year}:{today.month}"),
          InlineKeyboardButton("🗓 O'tgan oy", callback_data=f"{prefix}:month:{first_last_month.year}:{first_last_month.month}")],
+        [InlineKeyboardButton("📝 Boshqa sana / davr", callback_data=f"custom:{prefix}")],
         [InlineKeyboardButton("◀️ Orqaga", callback_data=back)],
     ])
 
@@ -154,15 +190,11 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     if data == "menu:agents_debt":
-        text = reports.agents_debt_report()
-        await query.message.edit_text(
-            text, parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
-        )
+        await send_report(query, reports.agents_debt_report())
         return
 
     if data == "menu:agent_detail":
-        await show_agent_list(update, "👤 <b>Agentni tanlang:</b>", "adetail")
+        await show_agent_list(update, "👤 <b>Qarzdor agentni tanlang:</b>", "adetail", debt_only=True)
         return
 
     if data == "menu:visits":
@@ -182,11 +214,24 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     if data == "menu:stock":
-        text = reports.stock_report()
+        messages = reports.stock_report()
+        # Birinchi xabarni edit qilamiz
         await query.message.edit_text(
-            text, parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
+            _truncate(messages[0]), parse_mode=ParseMode.HTML,
         )
+        # Qolganlarni yangi xabar qilib yuboramiz
+        for msg in messages[1:-1]:
+            await query.message.reply_text(_truncate(msg), parse_mode=ParseMode.HTML)
+        # Oxirgi xabar bilan "Orqaga" tugmasi
+        if len(messages) > 1:
+            await query.message.reply_text(
+                _truncate(messages[-1]), parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Bosh menyu", callback_data="back:main")]]),
+            )
+        else:
+            await query.message.edit_reply_markup(
+                InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]])
+            )
         return
 
     if data == "menu:dead_outlets":
@@ -198,14 +243,47 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     if data == "menu:sync_now":
-        await query.message.edit_text("🔄 <b>Yangilanmoqda...</b> Bir oz kuting.", parse_mode=ParseMode.HTML)
-        result = await run_sync("manual")
+        msg = await query.message.edit_text(
+            "🔄 <b>Yangilanmoqda...</b>\n\n📡 Boshlanmoqda...",
+            parse_mode=ParseMode.HTML,
+        )
+        import time
+        last_edit = [time.time()]
+
+        async def progress_cb(text: str):
+            # Telegram'ni "edit flood" qilmaslik uchun har 1 sek dan ortiq tezda edit qilmaymiz
+            now = time.time()
+            if now - last_edit[0] < 1.0:
+                return
+            last_edit[0] = now
+            try:
+                await msg.edit_text(
+                    f"🔄 <b>Yangilanmoqda...</b>\n\n{text}",
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception:
+                pass
+
+        result = await run_sync("manual", progress_cb=progress_cb)
         if result == "ok":
-            txt = "✅ <b>Ma'lumotlar yangilandi!</b>"
+            txt = "✅ <b>Ma'lumotlar muvaffaqiyatli yangilandi!</b>"
         else:
             txt = f"⚠️ <b>Xato yuz berdi:</b>\n<code>{result[:300]}</code>"
-        await query.message.edit_text(
+        await msg.edit_text(
             txt, parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
+        )
+        return
+
+    # --- Custom sana so'rovi (text input bilan) ---
+    if data.startswith("custom:"):
+        prefix = data.split(":", 1)[1]
+        context.user_data["waiting_for"] = prefix
+        await query.message.edit_text(
+            "📝 <b>Sana yoki davrni yozing:</b>\n\n"
+            "Bitta kun: <code>05.06.2026</code>\n"
+            "Davr: <code>01.06.2026 - 05.06.2026</code>",
+            parse_mode=ParseMode.HTML,
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
         )
         return
@@ -215,90 +293,89 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         parts = data.split(":")
         if parts[1] == "month":
             year, month = int(parts[2]), int(parts[3])
-            d_from = f"{year:04d}-{month:02d}-01"
-            if month == 12:
-                d_to = f"{year + 1:04d}-01-01"
-            else:
-                d_to = f"{year:04d}-{month + 1:02d}-01"
-            # Oylik uchun har bir kun savdosi
-            text = reports.daily_sales_report(d_from)
+            d_from, d_to = _month_range(year, month)
+            text = reports.daily_sales_report(d_from, d_to)
         else:
             text = reports.daily_sales_report(parts[1])
-        await query.message.edit_text(
-            text, parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
-        )
+        await send_report(query, text)
         return
 
     # --- Oylik savdo ---
     if data.startswith("msales:"):
         parts = data.split(":")
         year, month = int(parts[1]), int(parts[2])
-        text = reports.monthly_sales_report(year, month)
-        await query.message.edit_text(
-            text, parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
-        )
+        await send_report(query, reports.monthly_sales_report(year, month))
         return
 
     # --- Agent tanlovi (qarz) ---
     if data.startswith("adetail:"):
         agent_id = data.split(":", 1)[1]
-        text = reports.agent_debt_detail(agent_id)
-        await query.message.edit_text(
-            text, parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
-        )
+        await send_report(query, reports.agent_debt_detail(agent_id))
+        return
+
+    # --- Agentning o'lik do'konlari ---
+    if data.startswith("deadag:"):
+        parts = data.split(":")
+        days = int(parts[1])
+        agent_id = parts[2]
+        await send_report(query, reports.dead_outlets_by_agent(agent_id, dead_days=days))
         return
 
     # --- Vizitlar ---
     if data.startswith("visits:"):
         parts = data.split(":")
         if parts[1] == "month":
-            day = f"{parts[2]}-{parts[3]}-01"
+            year, month = int(parts[2]), int(parts[3])
+            d_from, d_to = _month_range(year, month)
+            await send_report(query, reports.visits_report(d_from, d_to))
         else:
-            day = parts[1]
-        text = reports.visits_report(day)
-        await query.message.edit_text(
-            text, parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
-        )
+            await send_report(query, reports.visits_report(parts[1]))
         return
 
     # --- TOP tovarlar ---
     if data.startswith("topprods:"):
         parts = data.split(":")
-        today = date.today()
         if parts[1] == "month":
             year, month = int(parts[2]), int(parts[3])
-            d_from = f"{year:04d}-{month:02d}-01"
-            if month == 12:
-                d_to = f"{year + 1:04d}-01-01"
-            else:
-                d_to = f"{year:04d}-{month + 1:02d}-01"
+            d_from, d_to = _month_range(year, month)
         else:
             d_from = d_to = parts[1]
-        text = reports.top_products_report(d_from, d_to)
-        await query.message.edit_text(
-            text, parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
-        )
+        await send_report(query, reports.top_products_report(d_from, d_to))
         return
 
-    # --- O'lik do'konlar ---
+    # --- O'lik do'konlar (umumiy hisobot) ---
     if data.startswith("dead:"):
         days = int(data.split(":")[1])
         text = reports.dead_outlets_report(dead_days=days)
+        # Pastida agentlarni tanlash uchun tugmalar qo'shamiz
+        with get_conn() as conn:
+            agents_list = conn.execute("SELECT sd_id, name FROM agents WHERE active='Y' ORDER BY name").fetchall()
+        buttons = [
+            [InlineKeyboardButton(f"👤 {a['name']}", callback_data=f"deadag:{days}:{a['sd_id']}")]
+            for a in agents_list
+        ]
+        buttons.append([InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")])
         await query.message.edit_text(
-            text, parse_mode=ParseMode.HTML,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
+            _truncate(text), parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup(buttons),
         )
         return
 
 
-async def show_agent_list(update: Update, title: str, prefix: str) -> None:
+async def show_agent_list(update: Update, title: str, prefix: str, debt_only: bool = False) -> None:
     with get_conn() as conn:
-        agents = conn.execute("SELECT sd_id, name FROM agents WHERE active='Y' ORDER BY name").fetchall()
+        if debt_only:
+            # Qarzdor mijozlari bor agentlar (faol bo'lmaganlar ham)
+            agents = conn.execute("""
+                SELECT DISTINCT a.sd_id, a.name
+                FROM agents a
+                JOIN clients c ON c.primary_agent_sd_id = a.sd_id
+                JOIN balances b ON b.client_sd_id = c.sd_id
+                WHERE b.balance < 0
+                ORDER BY a.name
+            """).fetchall()
+        else:
+            agents = conn.execute("SELECT sd_id, name FROM agents WHERE active='Y' ORDER BY name").fetchall()
 
     if not agents:
         await update.effective_message.edit_text(
@@ -319,6 +396,43 @@ async def show_agent_list(update: Update, title: str, prefix: str) -> None:
 
 
 # ------------------------------------------------------------------
+# Sana parseri (custom input uchun)
+# ------------------------------------------------------------------
+
+import re
+from datetime import datetime as _dt
+
+
+def parse_date_input(text: str) -> tuple[str | None, str | None]:
+    """
+    Foydalanuvchi yozgan sana(lar)ni parselash:
+    - "05.06.2026" → (2026-06-05, 2026-06-05)
+    - "01.06.2026 - 05.06.2026" → (2026-06-01, 2026-06-05)
+    Formatlar: DD.MM.YYYY, DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD
+    """
+    text = text.strip()
+    parts = re.split(r"\s*[-—–]\s*", text, maxsplit=1)
+
+    def _parse_one(s: str) -> str | None:
+        s = s.strip()
+        for fmt in ("%d.%m.%Y", "%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d", "%Y.%m.%d"):
+            try:
+                return _dt.strptime(s, fmt).date().isoformat()
+            except ValueError:
+                continue
+        return None
+
+    if len(parts) == 1:
+        d = _parse_one(parts[0])
+        return (d, d) if d else (None, None)
+    d_from = _parse_one(parts[0])
+    d_to = _parse_one(parts[1])
+    if d_from and d_to and d_from > d_to:
+        d_from, d_to = d_to, d_from
+    return (d_from, d_to)
+
+
+# ------------------------------------------------------------------
 # Noma'lum xabar
 # ------------------------------------------------------------------
 
@@ -326,6 +440,35 @@ async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not is_allowed(update.effective_user.id):
         await deny(update)
         return
+
+    waiting = context.user_data.get("waiting_for")
+    if waiting:
+        # Foydalanuvchi sana kiritdi
+        d_from, d_to = parse_date_input(update.message.text)
+        if not d_from:
+            await update.message.reply_text(
+                "⚠️ Sana noto'g'ri. Misol: <code>05.06.2026</code> yoki <code>01.06.2026 - 05.06.2026</code>",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+        context.user_data["waiting_for"] = None
+
+        if waiting == "dsales":
+            text = reports.daily_sales_report(d_from, d_to)
+        elif waiting == "visits":
+            text = reports.visits_report(d_from, d_to)
+        elif waiting == "topprods":
+            text = reports.top_products_report(d_from, d_to)
+        else:
+            text = "Noma'lum hisobot turi."
+
+        safe = _truncate(text)
+        await update.message.reply_text(
+            safe, parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Bosh menyu", callback_data="back:main")]]),
+        )
+        return
+
     await update.message.reply_text(
         "Menyudan foydalaning 👇",
         reply_markup=MAIN_MENU_KEYBOARD,
@@ -357,19 +500,25 @@ async def notify_admins(app: Application, text: str) -> None:
 # Ishga tushirish
 # ------------------------------------------------------------------
 
+async def post_init(app: Application) -> None:
+    from scheduler import setup_scheduler
+    setup_scheduler(app)
+
+
 def main() -> None:
     init_db()
     logger.info("Bot ishga tushmoqda...")
 
-    app = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    app = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .post_init(post_init)
+        .build()
+    )
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, unknown_message))
-
-    # Scheduler shu yerdan ulanadi
-    from scheduler import setup_scheduler
-    setup_scheduler(app)
 
     app.run_polling(drop_pending_updates=True)
 

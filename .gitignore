@@ -13,3 +13,9 @@ env/
 # Log fayllar
 *.log
 logs/
+
+# Local diagnostika fayllari
+diagnose.py
+diagnose2.py
+test_sync.py
+sample_order.json

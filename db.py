@@ -107,6 +107,13 @@ def init_db() -> None:
                 key     TEXT PRIMARY KEY,
                 value   TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS categories (
+                sd_id       TEXT PRIMARY KEY,
+                name        TEXT NOT NULL,
+                active      TEXT,
+                updated_at  TEXT
+            );
         """)
 
 

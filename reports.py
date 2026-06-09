@@ -9,43 +9,90 @@ from db import get_conn
 
 
 def _fmt(amount: float) -> str:
-    """Sonni o'qish uchun: 12345678 → '12.3 mln'."""
-    if amount >= 1_000_000:
-        return f"{amount / 1_000_000:.1f} mln so'm"
-    if amount >= 1_000:
-        return f"{amount / 1_000:.0f} ming so'm"
-    return f"{amount:.0f} so'm"
+    """Sonni o'qish uchun: 12345678 → '12 345 678 so'm'."""
+    try:
+        return f"{int(round(amount)):,}".replace(",", " ") + " so'm"
+    except (ValueError, TypeError):
+        return "0 so'm"
+
+
+def _num(amount: float) -> str:
+    """Faqat son, so'msiz."""
+    try:
+        return f"{int(round(amount)):,}".replace(",", " ")
+    except (ValueError, TypeError):
+        return "0"
+
+
+MIN_DEBT = 50_000  # Eng kam qarz summasi (so'mda)
+
+SEP = "━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+
+def _header(emoji: str, title: str, subtitle: str = "") -> str:
+    parts = [SEP, f"{emoji} <b>{title}</b>"]
+    if subtitle:
+        parts.append(f"📅 <i>{subtitle}</i>")
+    parts.append(SEP)
+    return "\n".join(parts)
+
+
+def _rank(i: int) -> str:
+    """1 → 🥇, 2 → 🥈, 3 → 🥉, qolgan → '04.'"""
+    if i == 1:
+        return "🥇"
+    if i == 2:
+        return "🥈"
+    if i == 3:
+        return "🥉"
+    return f"<code>{i:2d}.</code>"
+
+
+def _footer(label: str, value: str) -> str:
+    return f"{SEP}\n💎 <b>{label}:</b> <b>{value}</b>\n{SEP}"
 
 
 # ------------------------------------------------------------------
 # Kunlik savdo
 # ------------------------------------------------------------------
 
-def daily_sales_report(day: str) -> str:
-    """
-    day — YYYY-MM-DD
-    Qaytaradi: agent bo'yicha savdo va jami.
-    """
+def daily_sales_report(date_from: str, date_to: str = None) -> str:
+    """Savdo hisoboti. date_to bo'lmasa — bitta kun."""
+    if date_to is None:
+        date_to = date_from
+    is_single = (date_from == date_to)
+    title = "KUNLIK SAVDO" if is_single else "SAVDO (DAVR)"
+    subtitle = date_from if is_single else f"{date_from} — {date_to}"
+
     with get_conn() as conn:
         rows = conn.execute("""
-            SELECT a.name AS agent, SUM(o.total_after_discount) AS total
+            SELECT a.name AS agent, SUM(o.total_after_discount) AS total,
+                   COUNT(DISTINCT o.client_sd_id) AS akb
             FROM orders o
             LEFT JOIN agents a ON a.sd_id = o.agent_sd_id
-            WHERE o.date = ? AND o.status IN (1, 2, 3)
+            WHERE o.date >= ? AND o.date <= ? AND o.status IN (1, 2, 3)
             GROUP BY o.agent_sd_id
             ORDER BY total DESC
-        """, (day,)).fetchall()
+        """, (date_from, date_to)).fetchall()
+
+        total_akb_row = conn.execute("""
+            SELECT COUNT(DISTINCT client_sd_id) AS cnt FROM orders
+            WHERE date >= ? AND date <= ? AND status IN (1,2,3)
+        """, (date_from, date_to)).fetchone()
+    total_akb = total_akb_row["cnt"] if total_akb_row else 0
 
     if not rows:
-        return f"💰 <b>{day} — savdo yo'q yoki ma'lumot yuklanmagan.</b>"
+        return _header("💰", title, subtitle) + "\n\n<i>Bu davrda savdo yo'q yoki ma'lumot hali yuklanmagan.</i>"
 
-    lines = [f"💰 <b>Kunlik savdo — {day}</b>\n"]
+    lines = [_header("💰", title, subtitle), ""]
     total = 0.0
     for i, r in enumerate(rows, 1):
         agent = r["agent"] or "Noma'lum"
-        lines.append(f"{i}. {agent} — {_fmt(r['total'])}")
+        lines.append(f"{_rank(i)} {agent}")
+        lines.append(f"     💵 <b>{_fmt(r['total'])}</b>  ·  🛒 {r['akb']} ta")
         total += r["total"] or 0
-    lines.append(f"\n<b>JAMI: {_fmt(total)}</b>")
+    lines.append("")
+    lines.append(_footer("JAMI", f"{_fmt(total)}  ·  🛒 AKB: {total_akb}"))
     return "\n".join(lines)
 
 
@@ -62,11 +109,11 @@ def monthly_sales_report(year: int, month: int) -> str:
 
     month_names = ["", "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
                    "Iyul", "Avgust", "Sentyabr", "Oktyabr", "Noyabr", "Dekabr"]
+    subtitle = f"{month_names[month]} {year}"
 
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT
-                o.agent_sd_id,
                 a.name AS agent,
                 SUM(o.total_after_discount) AS total,
                 COUNT(DISTINCT o.client_sd_id) AS akb
@@ -77,28 +124,24 @@ def monthly_sales_report(year: int, month: int) -> str:
             ORDER BY total DESC
         """, (date_from, date_to)).fetchall()
 
-    if not rows:
-        return f"📈 <b>{month_names[month]} {year} — ma'lumot yo'q.</b>"
-
-    lines = [f"📈 <b>{year} — {month_names[month]} oylik savdo</b>\n"]
-    grand_total = 0.0
-    all_clients: set = set()
-
-    for i, r in enumerate(rows, 1):
-        agent = r["agent"] or "Noma'lum"
-        lines.append(f"{i}. {agent} — {_fmt(r['total'])} | AKB: {r['akb']}")
-        grand_total += r["total"] or 0
-
-    # Umumiy unikal mijozlar
-    with get_conn() as conn:
-        row = conn.execute("""
-            SELECT COUNT(DISTINCT client_sd_id) AS cnt
-            FROM orders
+        total_akb_row = conn.execute("""
+            SELECT COUNT(DISTINCT client_sd_id) AS cnt FROM orders
             WHERE date >= ? AND date < ? AND status IN (1,2,3)
         """, (date_from, date_to)).fetchone()
-    total_akb = row["cnt"] if row else 0
+    total_akb = total_akb_row["cnt"] if total_akb_row else 0
 
-    lines.append(f"\n<b>JAMI: {_fmt(grand_total)} | Umumiy AKB: {total_akb}</b>")
+    if not rows:
+        return _header("📈", "OYLIK SAVDO", subtitle) + "\n\n<i>Bu oyda ma'lumot yo'q.</i>"
+
+    lines = [_header("📈", "OYLIK SAVDO", subtitle), ""]
+    grand_total = 0.0
+    for i, r in enumerate(rows, 1):
+        agent = r["agent"] or "Noma'lum"
+        lines.append(f"{_rank(i)} {agent}")
+        lines.append(f"     💵 <b>{_fmt(r['total'])}</b>  ·  🛒 AKB: {r['akb']}")
+        grand_total += r["total"] or 0
+    lines.append("")
+    lines.append(_footer("JAMI", f"{_fmt(grand_total)}  ·  🛒 AKB: {total_akb}"))
     return "\n".join(lines)
 
 
@@ -107,11 +150,13 @@ def monthly_sales_report(year: int, month: int) -> str:
 # ------------------------------------------------------------------
 
 def agents_debt_report() -> str:
+    """Agentlar qarzi — har bir agentning JAMI qarzi (hamma do'konlar)."""
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT
                 a.name AS agent,
-                SUM(ABS(b.balance)) AS debt
+                SUM(ABS(b.balance)) AS debt,
+                COUNT(*) AS shops
             FROM balances b
             JOIN clients c ON c.sd_id = b.client_sd_id
             LEFT JOIN agents a ON a.sd_id = c.primary_agent_sd_id
@@ -121,15 +166,17 @@ def agents_debt_report() -> str:
         """).fetchall()
 
     if not rows:
-        return "🏪 <b>Hozirda qarzdor agent yo'q.</b>"
+        return _header("🏪", "AGENTLAR QARZI") + "\n\n<i>Qarzdor agent yo'q.</i>"
 
-    lines = ["🏪 <b>Agentlar qarzi</b>\n"]
+    lines = [_header("🏪", "AGENTLAR QARZI"), ""]
     total = 0.0
     for i, r in enumerate(rows, 1):
         agent = r["agent"] or "Agentsiz"
-        lines.append(f"{i}. {agent} — {_fmt(r['debt'])}")
+        lines.append(f"{_rank(i)} {agent}")
+        lines.append(f"     💸 <b>{_fmt(r['debt'])}</b>  ·  🏪 {r['shops']} ta do'kon")
         total += r["debt"] or 0
-    lines.append(f"\n<b>JAMI qarz: {_fmt(total)}</b>")
+    lines.append("")
+    lines.append(_footer("JAMI QARZ", _fmt(total)))
     return "\n".join(lines)
 
 
@@ -138,6 +185,7 @@ def agents_debt_report() -> str:
 # ------------------------------------------------------------------
 
 def agent_debt_detail(agent_sd_id: str) -> str:
+    """Bitta agent qarzdor do'konlari (eng kami MIN_DEBT)."""
     with get_conn() as conn:
         agent_row = conn.execute("SELECT name FROM agents WHERE sd_id=?", (agent_sd_id,)).fetchone()
         agent_name = agent_row["name"] if agent_row else "Noma'lum agent"
@@ -146,19 +194,23 @@ def agent_debt_detail(agent_sd_id: str) -> str:
             SELECT b.client_name AS shop, ABS(b.balance) AS debt
             FROM balances b
             JOIN clients c ON c.sd_id = b.client_sd_id
-            WHERE c.primary_agent_sd_id = ? AND b.balance < 0
+            WHERE c.primary_agent_sd_id = ? AND b.balance <= ?
             ORDER BY debt DESC
-        """, (agent_sd_id,)).fetchall()
+        """, (agent_sd_id, -MIN_DEBT)).fetchall()
 
     if not rows:
-        return f"👤 <b>{agent_name}</b> — qarzdor do'kon yo'q."
+        return _header("👤", agent_name, "qarzdorlar") + f"\n\n<i>Qarzdor do'kon yo'q (eng kami {_fmt(MIN_DEBT)}).</i>"
 
-    lines = [f"👤 <b>{agent_name} — qarzdor do'konlar</b>\n"]
-    total = 0.0
+    total = sum(r["debt"] or 0 for r in rows)
+    lines = [
+        _header("👤", agent_name, f"qarzdorlar · eng kami {_fmt(MIN_DEBT)}"),
+        "",
+    ]
     for i, r in enumerate(rows, 1):
-        lines.append(f"{i}. {r['shop']} — {_fmt(r['debt'])}")
-        total += r["debt"] or 0
-    lines.append(f"\n<b>Jami: {_fmt(total)}</b>")
+        lines.append(f"{_rank(i)} {r['shop']}")
+        lines.append(f"     💸 <b>{_fmt(r['debt'])}</b>")
+    lines.append("")
+    lines.append(_footer("JAMI", f"{_fmt(total)}  ·  🏪 {len(rows)} ta do'kon"))
     return "\n".join(lines)
 
 
@@ -166,32 +218,40 @@ def agent_debt_detail(agent_sd_id: str) -> str:
 # Vizitlar
 # ------------------------------------------------------------------
 
-def visits_report(day: str) -> str:
+def visits_report(date_from: str, date_to: str = None) -> str:
+    """Vizit hisoboti. date_to bo'lmasa, faqat date_from kuni uchun."""
+    if date_to is None:
+        date_to = date_from
+    subtitle = date_from if date_from == date_to else f"{date_from} — {date_to}"
+
     with get_conn() as conn:
         rows = conn.execute("""
             SELECT agent_name, COUNT(*) AS cnt
             FROM visits
-            WHERE date = ? AND visited = 1
+            WHERE date >= ? AND date <= ? AND visited = 1
             GROUP BY agent_sd_id
             ORDER BY cnt DESC
-        """, (day,)).fetchall()
-
+        """, (date_from, date_to)).fetchall()
         all_agents = conn.execute("SELECT name FROM agents WHERE active='Y'").fetchall()
 
     if not rows:
-        return f"🚶 <b>{day} — vizit ma'lumoti yo'q.</b>"
+        return _header("🚶", "VIZITLAR", subtitle) + "\n\n<i>Bu davrda vizit ma'lumoti yo'q.</i>"
 
     visited_names = {r["agent_name"] for r in rows}
-    lines = [f"🚶 <b>Vizitlar — {day}</b>\n"]
+    lines = [_header("🚶", "VIZITLAR", subtitle), ""]
     total = 0
     for i, r in enumerate(rows, 1):
-        lines.append(f"{i}. {r['agent_name']} — {r['cnt']} ta tashrif")
+        lines.append(f"{_rank(i)} {r['agent_name']}")
+        lines.append(f"     👣 <b>{r['cnt']}</b> ta tashrif")
         total += r["cnt"]
-    lines.append(f"\n<b>Jami: {total} ta tashrif</b>")
+    lines.append("")
+    lines.append(_footer("JAMI", f"{total} ta tashrif"))
 
-    zero_visit = [a["name"] for a in all_agents if a["name"] not in visited_names]
-    if zero_visit:
-        lines.append("\n⚠️ <b>0 vizit:</b> " + ", ".join(zero_visit))
+    # 0 vizit faqat bitta kun bo'lsa ma'noli (oylik uchun emas)
+    if date_from == date_to:
+        zero_visit = [a["name"] for a in all_agents if a["name"] not in visited_names]
+        if zero_visit:
+            lines.append(f"\n⚠️ <b>{date_from} kuni 0 vizit:</b>\n" + "\n".join(f"   • {n}" for n in zero_visit))
 
     return "\n".join(lines)
 
@@ -203,7 +263,9 @@ def visits_report(day: str) -> str:
 def top_products_report(date_from: str, date_to: str, top_n: int = 20) -> str:
     with get_conn() as conn:
         rows = conn.execute("""
-            SELECT oi.product_name AS name, SUM(oi.summa) AS total
+            SELECT oi.product_name AS name,
+                   SUM(oi.summa) AS total,
+                   SUM(oi.quantity) AS qty
             FROM order_items oi
             JOIN orders o ON o.sd_id = oi.order_sd_id
             WHERE o.date >= ? AND o.date <= ? AND o.status IN (1,2,3)
@@ -212,12 +274,18 @@ def top_products_report(date_from: str, date_to: str, top_n: int = 20) -> str:
             LIMIT ?
         """, (date_from, date_to, top_n)).fetchall()
 
+    subtitle = f"{date_from} — {date_to}" if date_from != date_to else date_from
     if not rows:
-        return f"🏆 <b>{date_from} — {date_to} — ma'lumot yo'q.</b>"
+        return _header("🏆", f"TOP {top_n} TOVAR", subtitle) + "\n\n<i>Ma'lumot yo'q.</i>"
 
-    lines = [f"🏆 <b>TOP {top_n} tovar ({date_from} — {date_to})</b>\n"]
+    lines = [_header("🏆", f"TOP {top_n} TOVAR", subtitle), ""]
+    grand_total = 0.0
     for i, r in enumerate(rows, 1):
-        lines.append(f"{i}. {r['name']} — {_fmt(r['total'])}")
+        lines.append(f"{_rank(i)} {r['name']}")
+        lines.append(f"     💵 <b>{_fmt(r['total'])}</b>  ·  📦 {_num(r['qty'])} dona")
+        grand_total += r["total"] or 0
+    lines.append("")
+    lines.append(_footer("JAMI", _fmt(grand_total)))
     return "\n".join(lines)
 
 
@@ -225,27 +293,118 @@ def top_products_report(date_from: str, date_to: str, top_n: int = 20) -> str:
 # Sklad ostatka
 # ------------------------------------------------------------------
 
-def stock_report() -> str:
+STOCK_AVG_DAYS = 30  # o'rtacha kunlik sotuv hisoblanadigan davr
+
+
+def _stock_color(days: float) -> str:
+    """Necha kunlik qoldiq → rang belgi."""
+    if days < 2:
+        return "🔴"
+    if days <= 5:
+        return "🟡"
+    return "🟢"
+
+
+def _days_str(days: float) -> str:
+    if days >= 999:
+        return "∞"
+    if days >= 100:
+        return "100+"
+    if days < 1:
+        return "0"
+    return f"{int(round(days))}"
+
+
+def _color_order(days: float) -> int:
+    """🔴 → 0, 🟡 → 1, 🟢 → 2 (sortlash uchun)"""
+    if days < 2:
+        return 0
+    if days <= 5:
+        return 1
+    return 2
+
+
+def stock_report() -> list[str]:
+    """
+    Kategoriya bo'yicha sklad ostatka.
+    Ichida: 🔴 → 🟡 → 🟢 (kritik birinchi).
+    Bir xil rangli mahsulotlar alifbo tartibida.
+    """
     with get_conn() as conn:
-        rows = conn.execute("""
-            SELECT product_name, warehouse, quantity, updated_at
-            FROM stock
-            ORDER BY warehouse, quantity DESC
+        rows = conn.execute(f"""
+            SELECT
+                s.product_sd_id,
+                MAX(s.product_name) AS name,
+                SUM(s.quantity) AS stock,
+                MAX(s.updated_at) AS upd,
+                COALESCE(cat.name, 'Kategoriyasiz') AS cat_name,
+                COALESCE((
+                    SELECT SUM(oi.quantity)
+                    FROM order_items oi
+                    JOIN orders o ON o.sd_id = oi.order_sd_id
+                    WHERE oi.product_sd_id = s.product_sd_id
+                      AND o.status IN (1, 2, 3)
+                      AND o.date >= date('now', '-{STOCK_AVG_DAYS} days')
+                ), 0) AS sold
+            FROM stock s
+            LEFT JOIN products p ON p.sd_id = s.product_sd_id
+            LEFT JOIN categories cat ON cat.sd_id = p.category
+            WHERE s.quantity > 0
+            GROUP BY s.product_sd_id
         """).fetchall()
 
     if not rows:
-        return "📦 <b>Sklad ma'lumoti yuklanmagan.</b>"
+        return ["📦 <b>SKLAD OSTATKA</b>\n\n<i>Ma'lumot yo'q.</i>"]
 
-    last_updated = rows[0]["updated_at"] if rows else ""
-    lines = [f"📦 <b>Sklad ostatka</b> (yangilangan: {last_updated[:10]})\n"]
-    current_wh = None
+    # Mahsulotlarni kategoriya bo'yicha guruhlash
+    by_cat: dict[str, list] = {}
     for r in rows:
-        if r["warehouse"] != current_wh:
-            current_wh = r["warehouse"]
-            lines.append(f"\n🏭 <b>{current_wh}</b>")
-        qty = r["quantity"]
-        lines.append(f"  • {r['product_name']} — {qty:,.0f} dona")
-    return "\n".join(lines)
+        stock = float(r["stock"] or 0)
+        sold = float(r["sold"] or 0)
+        avg_daily = sold / STOCK_AVG_DAYS if sold > 0 else 0
+        days = stock / avg_daily if avg_daily > 0 else 9999
+        item = {"name": r["name"], "stock": stock, "days": days}
+        by_cat.setdefault(r["cat_name"], []).append(item)
+
+    # Har kategoriya ichida: rang (kritik birinchi) → nom alifbo
+    for cat in by_cat.values():
+        cat.sort(key=lambda x: (_color_order(x["days"]), x["name"].lower()))
+
+    # Kategoriyalarni eng kritik mahsulotning kunligi bo'yicha
+    cat_sorted = sorted(by_cat.items(), key=lambda kv: min(it["days"] for it in kv[1]))
+
+    last_updated = rows[0]["upd"] if rows else ""
+
+    def _make_header(part: str = "") -> str:
+        title = "📦 <b>SKLAD OSTATKA</b>"
+        if part:
+            title += f" <i>({part})</i>"
+        return f"<i>yangilangan: {last_updated[:19]}</i>\n{title}\n"
+
+    messages = []
+    current = _make_header()
+    for cat_name, items in cat_sorted:
+        cat_header = f"\n\n📁 <b>{cat_name}</b>"
+        # Agar yangi kategoriya joylashishi mumkin bo'lmasa — yangi xabar
+        if len(current) + len(cat_header) > 3800:
+            messages.append(current)
+            part_n = len(messages) + 1
+            current = _make_header(f"{part_n}-qism")
+            cat_header = f"\n📁 <b>{cat_name}</b>"
+        current += cat_header
+        for it in items:
+            color = _stock_color(it["days"])
+            days_text = _days_str(it["days"])
+            line = f"\n{color} {it['name']} — <b>{_num(it['stock'])}</b> blok / <b>{days_text}</b> kunlik"
+            if len(current) + len(line) > 3800:
+                messages.append(current)
+                part_n = len(messages) + 1
+                current = _make_header(f"{part_n}-qism") + f"\n📁 <b>{cat_name}</b> <i>(davomi)</i>" + line
+            else:
+                current += line
+    if current:
+        messages.append(current)
+    return messages
 
 
 # ------------------------------------------------------------------
@@ -253,19 +412,17 @@ def stock_report() -> str:
 # ------------------------------------------------------------------
 
 def dead_outlets_report(dead_days: int = 14, lookback_days: int = 90) -> str:
-    today = date.today().isoformat()
+    """Agent bo'yicha o'lik do'konlar SONI ko'rsatiladi (uzun ro'yxat o'rniga)."""
     lookback_from = (date.today() - timedelta(days=lookback_days)).isoformat()
     dead_from = (date.today() - timedelta(days=dead_days)).isoformat()
 
     with get_conn() as conn:
-        # Faol bo'lgan do'konlar (lookback ichida kamida 1 buyurtma)
         active = conn.execute("""
             SELECT DISTINCT client_sd_id FROM orders
             WHERE date >= ? AND status IN (1,2,3)
         """, (lookback_from,)).fetchall()
         active_ids = {r["client_sd_id"] for r in active}
 
-        # So'nggi dead_days ichida buyurtma berganlar
         recent = conn.execute("""
             SELECT DISTINCT client_sd_id FROM orders
             WHERE date >= ? AND status IN (1,2,3)
@@ -274,37 +431,68 @@ def dead_outlets_report(dead_days: int = 14, lookback_days: int = 90) -> str:
 
         dead_ids = active_ids - recent_ids
         if not dead_ids:
-            return f"💀 <b>O'lik do'konlar yo'q</b> (chegarа: {dead_days} kun)\n\nHamma do'konlar so'nggi {dead_days} kunda faol."
+            return f"💀 <b>O'lik do'konlar yo'q</b> (chegara: {dead_days} kun)"
 
         placeholders = ",".join("?" * len(dead_ids))
         rows = conn.execute(f"""
             SELECT
-                c.sd_id, c.name AS shop, c.primary_agent_sd_id,
-                a.name AS agent,
-                MAX(o.date) AS last_order
+                COALESCE(a.name, 'Agentsiz') AS agent,
+                c.primary_agent_sd_id,
+                COUNT(*) AS cnt
             FROM clients c
             LEFT JOIN agents a ON a.sd_id = c.primary_agent_sd_id
-            LEFT JOIN orders o ON o.client_sd_id = c.sd_id AND o.status IN (1,2,3)
             WHERE c.sd_id IN ({placeholders})
-            GROUP BY c.sd_id
-            ORDER BY a.name, last_order ASC
+            GROUP BY c.primary_agent_sd_id
+            ORDER BY cnt DESC
         """, list(dead_ids)).fetchall()
 
-    lines = [f"💀 <b>O'lik do'konlar</b> (oxirgi {dead_days} kunda buyurtma yo'q)\n"]
-    current_agent = None
-    count = 0
-    for r in rows:
-        agent = r["agent"] or "Agentsiz"
-        if agent != current_agent:
-            current_agent = agent
-            lines.append(f"\n👤 <b>{agent}</b>")
-        last = r["last_order"] or "hech qachon"
-        if r["last_order"]:
-            days_ago = (date.today() - date.fromisoformat(r["last_order"])).days
-            last = f"{r['last_order']} ({days_ago} kun oldin)"
-        lines.append(f"  • {r['shop']} — oxirgi buyurtma: {last}")
-        count += 1
-    lines.insert(1, f"Jami: {count} ta do'kon\n")
+    lines = [
+        _header("💀", "O'LIK DO'KONLAR", f"oxirgi {dead_days} kunda buyurtma yo'q"),
+        "",
+        f"<b>Jami:</b> <code>{len(dead_ids)}</code> ta do'kon\n",
+    ]
+    for i, r in enumerate(rows, 1):
+        lines.append(f"{_rank(i)} {r['agent']}")
+        lines.append(f"     💀 <b>{r['cnt']}</b> ta do'kon")
+    lines.append("")
+    lines.append("<i>👆 Bitta agentning do'konlarini ko'rish uchun pastdagi tugmalardan birini bosing.</i>")
+    return "\n".join(lines)
+
+
+def dead_outlets_by_agent(agent_sd_id: str, dead_days: int = 14, lookback_days: int = 90, limit: int = 50) -> str:
+    """Bitta agentning o'lik do'konlari ro'yxati."""
+    lookback_from = (date.today() - timedelta(days=lookback_days)).isoformat()
+    dead_from = (date.today() - timedelta(days=dead_days)).isoformat()
+
+    with get_conn() as conn:
+        agent_row = conn.execute("SELECT name FROM agents WHERE sd_id=?", (agent_sd_id,)).fetchone()
+        agent_name = agent_row["name"] if agent_row else "Noma'lum"
+
+        rows = conn.execute("""
+            SELECT c.name AS shop, MAX(o.date) AS last_order
+            FROM clients c
+            LEFT JOIN orders o ON o.client_sd_id = c.sd_id AND o.status IN (1,2,3)
+            WHERE c.primary_agent_sd_id = ?
+            GROUP BY c.sd_id
+            HAVING MAX(o.date) IS NOT NULL
+               AND MAX(o.date) >= ?
+               AND MAX(o.date) < ?
+            ORDER BY last_order ASC
+            LIMIT ?
+        """, (agent_sd_id, lookback_from, dead_from, limit + 1)).fetchall()
+
+    if not rows:
+        return f"💀 <b>{agent_name}</b> — o'lik do'kon yo'q."
+
+    truncated = len(rows) > limit
+    rows = rows[:limit]
+    lines = [_header("💀", agent_name, "o'lik do'konlar"), ""]
+    for i, r in enumerate(rows, 1):
+        days_ago = (date.today() - date.fromisoformat(r["last_order"])).days
+        lines.append(f"{_rank(i)} {r['shop']}")
+        lines.append(f"     📅 {r['last_order']}  ·  ⏱ <b>{days_ago}</b> kun")
+    if truncated:
+        lines.append(f"\n<i>...va yana ko'p. Faqat birinchi {limit} ko'rsatildi.</i>")
     return "\n".join(lines)
 
 
@@ -383,33 +571,35 @@ def daily_digest() -> str:
                          set(r["client_sd_id"] for r in recent_set))
 
     # Matn yig'ish
-    lines = [f"🔔 <b>KUNLIK XULOSA — {today}</b>\n"]
+    lines = [_header("🔔", "KUNLIK XULOSA", today), ""]
 
     # Savdo
+    lines.append(f"💰 <b>Bugungi savdo</b>")
+    lines.append(f"     💵 <b>{_fmt(today_sales)}</b>")
     if yesterday_sales > 0:
         diff_pct = (today_sales - yesterday_sales) / yesterday_sales * 100
-        arrow = "↑" if diff_pct >= 0 else "↓"
-        diff_str = f"kecha: {_fmt(yesterday_sales)} → {diff_pct:+.0f}% {arrow}"
-    else:
-        diff_str = "kecha ma'lumot yo'q"
-    lines.append(f"💰 Bugungi savdo: {_fmt(today_sales)}\n   ({diff_str})")
+        arrow = "📈" if diff_pct >= 0 else "📉"
+        lines.append(f"     {arrow} kecha: {_fmt(yesterday_sales)} ({diff_pct:+.0f}%)")
+        # Tushish ogohlantirish
+        if today_sales < yesterday_sales:
+            drop_pct = (yesterday_sales - today_sales) / yesterday_sales * 100
+            if drop_pct >= SALES_DROP_ALERT_PERCENT:
+                lines.append(f"     ⚠️ <b>Savdo {drop_pct:.0f}% tushdi!</b>")
 
-    # Savdo tushish ogohlantirishи
-    if yesterday_sales > 0 and today_sales < yesterday_sales:
-        drop_pct = (yesterday_sales - today_sales) / yesterday_sales * 100
-        if drop_pct >= SALES_DROP_ALERT_PERCENT:
-            lines.append(f"📉 <b>Diqqat: savdo {drop_pct:.0f}% tushdi!</b>")
-
-    lines.append(f"🚶 Vizitlar: {today_visits} ta")
-
+    lines.append("")
+    lines.append(f"🚶 <b>Vizitlar:</b> <code>{today_visits}</code> ta")
     if zero_visit_agents:
-        lines.append("⚠️ Bugun 0 vizit: " + ", ".join(zero_visit_agents))
+        lines.append(f"     ⚠️ 0 vizit: {', '.join(zero_visit_agents)}")
 
     if debt_agents:
-        debt_list = ", ".join(f"{name} ({_fmt(d)})" for name, d in debt_agents)
-        lines.append(f"💳 Qarzi yuqori: {debt_list}")
+        lines.append("")
+        lines.append(f"💳 <b>Qarzi yuqori agentlar:</b>")
+        for name, d in debt_agents:
+            lines.append(f"     • {name} — <b>{_fmt(d)}</b>")
 
-    lines.append(f"💀 O'lik do'konlar: {dead_count} ta")
-    lines.append(f"\n📊 Bu oy: {_fmt(month_sales)}")
+    lines.append("")
+    lines.append(f"💀 <b>O'lik do'konlar:</b> <code>{dead_count}</code> ta")
+    lines.append("")
+    lines.append(_footer("BU OY", _fmt(month_sales)))
 
     return "\n".join(lines)

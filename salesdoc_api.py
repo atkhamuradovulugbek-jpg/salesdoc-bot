@@ -14,14 +14,23 @@ from config import SALESDOC_BASE_URL, SALESDOC_LOGIN, SALESDOC_PASSWORD
 
 logger = logging.getLogger(__name__)
 
-PAUSE_BETWEEN_REQUESTS = 0.4  # sekundlarda
+PAUSE_BETWEEN_REQUESTS = 0.05  # sekundlarda (oldin 0.4 edi)
 
 
 class SalesDocClient:
     def __init__(self) -> None:
         self._user_id: str | None = None
         self._token: str | None = None
-        self._client = httpx.AsyncClient(timeout=30.0)
+        self._client = httpx.AsyncClient(
+            timeout=30.0,
+            headers={
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                "Accept": "application/json",
+                "Origin": SALESDOC_BASE_URL.split("/api/v2")[0],
+                "Referer": SALESDOC_BASE_URL.split("/api/v2")[0] + "/",
+            },
+        )
 
     # ------------------------------------------------------------------
     # Auth
@@ -100,6 +109,7 @@ class SalesDocClient:
         result_key_map = {
             "getAgent": "agent",
             "getProduct": "product",
+            "getProductCategory": "productCategory",
             "getClient": "client",
             "getBalance": "balance",
             "getVisit": "visit",
@@ -107,23 +117,46 @@ class SalesDocClient:
             "getOrder": "order",
         }
         key = result_key_map.get(method, method)
+        LIMIT = 1000
         all_items: list[dict] = []
+        seen_first_id: str | None = None
         page = 1
-        while True:
+        max_pages = 50  # xavfsizlik chegarasi (50 * 1000 = 50K yozuv)
+
+        while page <= max_pages:
+            # Sales Doctor API pagination'ni params ichida flat ko'rinishda qabul qiladi
             payload = {
                 "method": method,
                 "auth": self._auth_block(),
-                "params": {**params, "pagination": {"limit": 1000, "page": page}},
+                "params": {**params, "limit": LIMIT, "page": page},
             }
             data = await self._post(payload)
-            result = data.get("result", {})
-            items = result.get(key, [])
-            all_items.extend(items)
-            total = result.get("pagination", {}).get("total", len(all_items))
-            if len(all_items) >= total or not items:
+            result = data.get("result") or {}
+            items = result.get(key) or []
+
+            if not items:
                 break
+
+            # Duplicate sahifa tekshiruvi
+            first_id = items[0].get("SD_id") if isinstance(items[0], dict) else None
+            if page > 1 and first_id == seen_first_id:
+                logger.warning("Pagination ishlamadi: %s, %d-sahifa takror keldi", method, page)
+                break
+            if page == 1:
+                seen_first_id = first_id
+
+            all_items.extend(items)
+
+            # Server limit'ni e'tiborga olmagan (>1000 ta keldi) — hamma ma'lumot 1 sahifada
+            if len(items) > LIMIT:
+                break
+            # Limit'dan kam keldi — oxirgi sahifa
+            if len(items) < LIMIT:
+                break
+
             page += 1
             await asyncio.sleep(PAUSE_BETWEEN_REQUESTS)
+
         return all_items
 
     # ------------------------------------------------------------------
@@ -135,6 +168,9 @@ class SalesDocClient:
 
     async def get_products(self) -> list[dict]:
         return await self._paginate("getProduct", {})
+
+    async def get_categories(self) -> list[dict]:
+        return await self._paginate("getProductCategory", {})
 
     async def get_clients(self) -> list[dict]:
         return await self._paginate("getClient", {})
