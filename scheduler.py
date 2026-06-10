@@ -44,6 +44,21 @@ async def _test_send_to_group(app: Application) -> None:
         logger.exception("TEST xabar xatosi: %s", exc)
 
 
+async def _test_send_agent_cards(app: Application) -> None:
+    """BIR MARTALIK TEST: agent kartochkalarini avtomatik guruhga yuborish."""
+    from bot import send_agent_cards_to_group, notify_admins
+    logger.info("🧪 AGENT KARTOCHKALARI TEST boshlandi")
+    try:
+        sent = await send_agent_cards_to_group(app)
+        logger.info("🧪 TEST yakuni: %d ta agent kartochkasi yuborildi", sent)
+        if sent == 0:
+            await notify_admins(app, "⚠️ Test: 0 ta kartochka. Bazada agent ma'lumotlari yo'q bo'lishi mumkin.")
+    except Exception as exc:
+        logger.exception("Agent kartochkalari test xatosi: %s", exc)
+        from bot import notify_admins
+        await notify_admins(app, f"⚠️ Test xatosi:\n<code>{str(exc)[:200]}</code>")
+
+
 async def _scheduled_full(app: Application, time_label: str) -> None:
     """To'liq sync + admin xabari."""
     logger.info("%s — TO'LIQ sync boshlandi", time_label)
@@ -140,15 +155,15 @@ def setup_scheduler(app: Application) -> None:
         misfire_grace_time=1800,
     )
 
-    # 🧪 BIR MARTALIK TEST — 23:30 da guruhga xabar yuboriladi (keyin olib tashlanadi)
+    # 🧪 BIR MARTALIK TEST — 23:45 da agent kartochkalari guruhga yuboriladi
     scheduler.add_job(
-        _test_send_to_group,
-        CronTrigger(hour=23, minute=30, timezone=TIMEZONE),
+        _test_send_agent_cards,
+        CronTrigger(hour=23, minute=45, timezone=TIMEZONE),
         args=[app],
-        id="onetime_test_23_30",
+        id="onetime_test_cards_23_45",
         replace_existing=True,
         misfire_grace_time=600,
     )
 
     scheduler.start()
-    logger.info("Scheduler ishga tushdi: 03:00 (TO'LIQ), 12:00 (TEZ), 15:00 (TO'LIQ), 20:00 (TEZ+guruh), 23:30 (TEST) — %s", TIMEZONE)
+    logger.info("Scheduler ishga tushdi: 03:00 (TO'LIQ), 12:00 (TEZ), 15:00 (TO'LIQ), 20:00 (TEZ+guruh), 23:45 (KARTOCHKA TEST) — %s", TIMEZONE)
