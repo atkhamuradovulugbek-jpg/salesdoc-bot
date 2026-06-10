@@ -60,14 +60,39 @@ def _to_float(v, default: float = 0.0) -> float:
         return default
 
 
-async def run_sync(sync_type: str = "scheduled", progress_cb=None) -> str:
+_sync_lock = asyncio.Lock()
+
+
+async def run_sync(sync_type: str = "scheduled", progress_cb=None, mode: str = "full") -> str:
     """
-    Sales Doctor → SQLite. Bulk insert. Ixtiyoriy progress callback.
+    Sales Doctor → SQLite.
+    mode='full' — hammasini tortadi (~10-15 min)
+    mode='fast' — faqat tez o'zgaradiganlarini (balans, ombor, bugungi vizit/buyurtma, ~2-3 min)
     """
+    if _sync_lock.locked():
+        return "busy"
+    async with _sync_lock:
+        return await _run_sync_impl(sync_type, progress_cb, mode)
+
+
+async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
     api = get_api()
     now = _now_str()
     today = date.today().isoformat()
-    lookback_from = (date.today() - timedelta(days=DEAD_OUTLET_LOOKBACK_DAYS)).isoformat()
+
+    # FAST mode: faqat bugungi buyurtmalar. FULL mode: 90 kun (o'lik do'kon uchun).
+    if mode == "fast":
+        lookback_from = today
+    else:
+        lookback_from = (date.today() - timedelta(days=DEAD_OUTLET_LOOKBACK_DAYS)).isoformat()
+
+    # Birinchi marta DB bo'sh bo'lsa — har doim FULL
+    with get_conn() as conn:
+        client_count = conn.execute("SELECT COUNT(*) AS c FROM clients").fetchone()["c"]
+    if client_count == 0:
+        mode = "full"
+        lookback_from = (date.today() - timedelta(days=DEAD_OUTLET_LOOKBACK_DAYS)).isoformat()
+        logger.info("DB bo'sh — to'liq sync ishga tushadi")
 
     async def progress(text: str):
         if progress_cb:
@@ -80,33 +105,40 @@ async def run_sync(sync_type: str = "scheduled", progress_cb=None) -> str:
         await progress("📡 Sales Doctor ga ulanyapmiz...")
         await api.login()
 
-        visits_from = today  # Faqat bugungi (oldin ishlagan tezkor versiya)
+        # Statik ma'lumotlar (kam o'zgaradi) — faqat FULL modda
+        agents = []
+        categories = []
+        products = []
+        clients = []
 
-        await progress("👥 Agentlar tortilmoqda...")
-        agents = await api.get_agents();      logger.info("✓ agents: %d", len(agents))
+        if mode == "full":
+            await progress("👥 Agentlar tortilmoqda...")
+            agents = await api.get_agents();      logger.info("✓ agents: %d", len(agents))
 
-        await progress(f"📁 Kategoriyalar tortilmoqda...\n<i>(agentlar: {len(agents)})</i>")
-        categories = await api.get_categories(); logger.info("✓ categories: %d", len(categories))
+            await progress(f"📁 Kategoriyalar tortilmoqda...")
+            categories = await api.get_categories(); logger.info("✓ categories: %d", len(categories))
 
-        await progress(f"📦 Mahsulotlar tortilmoqda...\n<i>(kategoriyalar: {len(categories)})</i>")
-        products = await api.get_products();  logger.info("✓ products: %d", len(products))
+            await progress(f"📦 Mahsulotlar tortilmoqda...")
+            products = await api.get_products();  logger.info("✓ products: %d", len(products))
 
-        await progress(f"💳 Qarz/balanslar tortilmoqda...\n<i>(mahsulotlar: {len(products)})</i>")
+        # Dinamik ma'lumotlar (har doim tortiladi)
+        await progress(f"💳 Qarz/balanslar tortilmoqda...")
         balances = await api.get_balance();   logger.info("✓ balances: %d", len(balances))
 
-        await progress(f"🏭 Ombor qoldiqlari tortilmoqda...\n<i>(balanslar: {len(balances)})</i>")
+        await progress(f"🏭 Ombor qoldiqlari tortilmoqda...")
         warehouses = await api.get_stock();   logger.info("✓ warehouses: %d", len(warehouses))
 
         await progress(f"🚶 Bugungi vizitlar tortilmoqda...")
-        visits = await api.get_visits(visits_from, today); logger.info("✓ visits: %d", len(visits))
+        visits = await api.get_visits(today, today); logger.info("✓ visits: %d", len(visits))
 
-        await progress(f"🏪 Mijozlar tortilmoqda... <i>(ko'p ma'lumot)</i>")
-        clients = await api.get_clients();    logger.info("✓ clients: %d", len(clients))
+        if mode == "full":
+            await progress(f"🏪 Mijozlar tortilmoqda... <i>(ko'p ma'lumot)</i>")
+            clients = await api.get_clients();    logger.info("✓ clients: %d", len(clients))
 
-        await progress(f"💰 Buyurtmalar tortilmoqda...\n<i>(mijozlar: {len(clients)}, eng katta qism)</i>")
+        await progress(f"💰 Buyurtmalar tortilmoqda...")
         orders = await api.get_orders(lookback_from, today); logger.info("✓ orders: %d", len(orders))
 
-        await progress(f"💾 Bazaga yozilmoqda...\n<i>(buyurtmalar: {len(orders)})</i>")
+        await progress(f"💾 Bazaga yozilmoqda...")
 
         logger.info(
             "Tortildi: agents=%d, products=%d, clients=%d, orders=%d, "
@@ -271,38 +303,42 @@ async def run_sync(sync_type: str = "scheduled", progress_cb=None) -> str:
                     len(stock_rows), len(visit_rows))
 
         with get_conn() as conn:
-            conn.executemany("""
-                INSERT INTO agents (sd_id, code_1c, name, active, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(sd_id) DO UPDATE SET
-                    code_1c=excluded.code_1c, name=excluded.name,
-                    active=excluded.active, updated_at=excluded.updated_at
-            """, agent_rows)
+            if agent_rows:
+                conn.executemany("""
+                    INSERT INTO agents (sd_id, code_1c, name, active, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(sd_id) DO UPDATE SET
+                        code_1c=excluded.code_1c, name=excluded.name,
+                        active=excluded.active, updated_at=excluded.updated_at
+                """, agent_rows)
 
-            conn.executemany("""
-                INSERT INTO categories (sd_id, name, active, updated_at)
-                VALUES (?, ?, ?, ?)
-                ON CONFLICT(sd_id) DO UPDATE SET
-                    name=excluded.name, active=excluded.active,
-                    updated_at=excluded.updated_at
-            """, category_rows)
+            if category_rows:
+                conn.executemany("""
+                    INSERT INTO categories (sd_id, name, active, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(sd_id) DO UPDATE SET
+                        name=excluded.name, active=excluded.active,
+                        updated_at=excluded.updated_at
+                """, category_rows)
 
-            conn.executemany("""
-                INSERT INTO products (sd_id, code_1c, name, category, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-                ON CONFLICT(sd_id) DO UPDATE SET
-                    code_1c=excluded.code_1c, name=excluded.name,
-                    category=excluded.category, updated_at=excluded.updated_at
-            """, product_rows)
+            if product_rows:
+                conn.executemany("""
+                    INSERT INTO products (sd_id, code_1c, name, category, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(sd_id) DO UPDATE SET
+                        code_1c=excluded.code_1c, name=excluded.name,
+                        category=excluded.category, updated_at=excluded.updated_at
+                """, product_rows)
 
-            conn.executemany("""
-                INSERT INTO clients (sd_id, code_1c, name, primary_agent_sd_id, territory, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(sd_id) DO UPDATE SET
-                    code_1c=excluded.code_1c, name=excluded.name,
-                    primary_agent_sd_id=excluded.primary_agent_sd_id,
-                    territory=excluded.territory, updated_at=excluded.updated_at
-            """, client_rows)
+            if client_rows:
+                conn.executemany("""
+                    INSERT INTO clients (sd_id, code_1c, name, primary_agent_sd_id, territory, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(sd_id) DO UPDATE SET
+                        code_1c=excluded.code_1c, name=excluded.name,
+                        primary_agent_sd_id=excluded.primary_agent_sd_id,
+                        territory=excluded.territory, updated_at=excluded.updated_at
+                """, client_rows)
 
             conn.executemany("""
                 INSERT INTO orders (sd_id, date, status, agent_sd_id, client_sd_id, total_after_discount)
@@ -357,12 +393,13 @@ async def run_sync(sync_type: str = "scheduled", progress_cb=None) -> str:
                     has_order=excluded.has_order, order_summa=excluded.order_summa
             """, visit_rows)
 
+            log_type = f"{sync_type}_{mode}"
             conn.execute(
                 "INSERT INTO sync_log (run_at, type, status, note) VALUES (?, ?, ?, ?)",
-                (now, sync_type, "ok", f"orders={len(order_rows)} (skipped={skipped_no_date})"),
+                (now, log_type, "ok", f"orders={len(order_rows)} (skipped={skipped_no_date})"),
             )
 
-        logger.info("✅ Sinxronizatsiya muvaffaqiyatli tugadi.")
+        logger.info("✅ Sinxronizatsiya muvaffaqiyatli tugadi (%s).", mode)
         return "ok"
 
     except Exception as exc:

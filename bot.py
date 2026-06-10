@@ -56,7 +56,8 @@ MAIN_MENU_KEYBOARD = InlineKeyboardMarkup([
      InlineKeyboardButton("💀 O'lik do'konlar", callback_data="menu:dead_outlets")],
     [InlineKeyboardButton("📊 Agent planlari", callback_data="menu:plans"),
      InlineKeyboardButton("📤 Guruh sozlash", callback_data="menu:groupset")],
-    [InlineKeyboardButton("🔄 Hozir yangilash", callback_data="menu:sync_now")],
+    [InlineKeyboardButton("🔄 Tez yangilash", callback_data="menu:sync_now"),
+     InlineKeyboardButton("📥 To'liq yangilash", callback_data="menu:sync_full")],
 ])
 
 
@@ -436,9 +437,47 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             except Exception:
                 pass
 
-        result = await run_sync("manual", progress_cb=progress_cb)
+        result = await run_sync("manual", progress_cb=progress_cb, mode="fast")
         if result == "ok":
-            txt = "✅ <b>Ma'lumotlar muvaffaqiyatli yangilandi!</b>"
+            txt = "✅ <b>Tez yangilash tugadi!</b>\n<i>(balans, ombor, bugungi vizit va buyurtma)</i>"
+        elif result == "busy":
+            txt = "⏳ <b>Boshqa sync hozir ishlamoqda.</b>\n<i>Bir necha daqiqa kuting.</i>"
+        else:
+            txt = f"⚠️ <b>Xato yuz berdi:</b>\n<code>{result[:300]}</code>"
+        await msg.edit_text(
+            txt, parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
+        )
+        return
+
+    # --- To'liq yangilash (~15 min) ---
+    if data == "menu:sync_full":
+        msg = await query.message.edit_text(
+            "📥 <b>To'liq yangilash boshlanmoqda...</b>\n"
+            "<i>~15 daqiqa olishi mumkin. Kutishingiz shart emas — orqada ishlaydi.</i>",
+            parse_mode=ParseMode.HTML,
+        )
+        import time as _time
+        last_edit_full = [_time.time()]
+
+        async def progress_cb_full(text: str):
+            now_t = _time.time()
+            if now_t - last_edit_full[0] < 1.5:
+                return
+            last_edit_full[0] = now_t
+            try:
+                await msg.edit_text(
+                    f"📥 <b>To'liq yangilash...</b>\n\n{text}",
+                    parse_mode=ParseMode.HTML,
+                )
+            except Exception:
+                pass
+
+        result = await run_sync("manual", progress_cb=progress_cb_full, mode="full")
+        if result == "ok":
+            txt = "✅ <b>To'liq yangilash tugadi!</b>\n<i>(hamma ma'lumotlar yangi)</i>"
+        elif result == "busy":
+            txt = "⏳ <b>Boshqa sync hozir ishlamoqda.</b>\n<i>Tugashini kuting.</i>"
         else:
             txt = f"⚠️ <b>Xato yuz berdi:</b>\n<code>{result[:300]}</code>"
         await msg.edit_text(
