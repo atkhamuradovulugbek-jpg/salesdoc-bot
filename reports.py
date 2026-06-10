@@ -931,7 +931,6 @@ def daily_ball_report(category: str) -> str | None:
         f"🔥 <b>BUGUNGI BALL JADVALI</b>",
         f"{cat_emoji} <b>{cat_name} AGENTLARI</b>",
         f"📅 {date.today().strftime('%d.%m.%Y')}",
-        f"🎯 Kunlik plan: <b>{_fmt(daily_plan)}</b>",
         CARD_BORDER,
         "",
     ]
