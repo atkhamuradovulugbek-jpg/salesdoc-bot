@@ -944,19 +944,18 @@ def daily_ball_report(category: str) -> str | None:
         lines.append(f"     💵 {_fmt(it['sales'])}  ·  {it['emoji']} <b>{it['ball']}</b> ball ({it['pct']:.0f}%)")
         lines.append("")
 
-    # 4+ — qisqaroq
+    # 4+ — har biri orasida bo'sh qator, nomi bold
     if len(items) > 3:
-        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
         for i, it in enumerate(items[3:], start=4):
-            lines.append(f"<code>{i:2d}.</code> {it['name']}")
+            lines.append(f"<b>{i}. {it['name']}</b>")
             lines.append(f"     {_fmt(it['sales'])}  ·  {it['emoji']} <b>{it['ball']}</b> ball")
-        lines.append("")
+            lines.append("")  # bo'sh qator ajratuvchi
+
 
     # Statistika
     stats = {"🔥": 0, "✅": 0, "🟢": 0, "🟡": 0, "🔴": 0}
     for it in items:
         stats[it["emoji"]] += 1
-    total_balls = sum(it["ball"] for it in items)
 
     lines.append(CARD_BORDER)
     lines.append(f"📊 <b>BUGUNGI STATISTIKA</b>")
@@ -966,8 +965,6 @@ def daily_ball_report(category: str) -> str | None:
     if stats["🟢"]: lines.append(f"🟢 Deyarli bajardi (90-99%): <b>{stats['🟢']}</b> agent")
     if stats["🟡"]: lines.append(f"🟡 Yaqinlashdi (80-89%): <b>{stats['🟡']}</b> agent")
     if stats["🔴"]: lines.append(f"🔴 Kam sotdi (&lt;80%): <b>{stats['🔴']}</b> agent")
-    lines.append("")
-    lines.append(f"💎 <b>JAMI BALL: {total_balls}</b>")
     lines.append(CARD_BORDER)
     lines.append(SPACER)
     lines.append(SPACER)
