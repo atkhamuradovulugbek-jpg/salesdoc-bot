@@ -80,7 +80,7 @@ async def run_sync(sync_type: str = "scheduled", progress_cb=None) -> str:
         await progress("📡 Sales Doctor ga ulanyapmiz...")
         await api.login()
 
-        visits_from = (date.today() - timedelta(days=30)).isoformat()
+        visits_from = today  # Faqat bugungi (oldin ishlagan tezkor versiya)
 
         await progress("👥 Agentlar tortilmoqda...")
         agents = await api.get_agents();      logger.info("✓ agents: %d", len(agents))
@@ -97,7 +97,7 @@ async def run_sync(sync_type: str = "scheduled", progress_cb=None) -> str:
         await progress(f"🏭 Ombor qoldiqlari tortilmoqda...\n<i>(balanslar: {len(balances)})</i>")
         warehouses = await api.get_stock();   logger.info("✓ warehouses: %d", len(warehouses))
 
-        await progress(f"🚶 Vizitlar (oxirgi 30 kun) tortilmoqda...")
+        await progress(f"🚶 Bugungi vizitlar tortilmoqda...")
         visits = await api.get_visits(visits_from, today); logger.info("✓ visits: %d", len(visits))
 
         await progress(f"🏪 Mijozlar tortilmoqda... <i>(ko'p ma'lumot)</i>")

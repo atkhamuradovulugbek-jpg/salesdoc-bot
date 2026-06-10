@@ -40,17 +40,22 @@ async def _evening_sync(app: Application) -> None:
 def setup_scheduler(app: Application) -> None:
     scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 
+    # Async funksiyalarni to'g'ridan-to'g'ri uzatish (lambda noto'g'ri ishlaydi)
     scheduler.add_job(
-        lambda: asyncio.create_task(_noon_sync(app)),
+        _noon_sync,
         CronTrigger(hour=12, minute=0, timezone=TIMEZONE),
+        args=[app],
         id="noon_sync",
         replace_existing=True,
+        misfire_grace_time=1800,
     )
     scheduler.add_job(
-        lambda: asyncio.create_task(_evening_sync(app)),
+        _evening_sync,
         CronTrigger(hour=20, minute=0, timezone=TIMEZONE),
+        args=[app],
         id="evening_sync",
         replace_existing=True,
+        misfire_grace_time=1800,
     )
 
     scheduler.start()
