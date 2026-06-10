@@ -38,6 +38,10 @@ DEFAULT_CITY_SALES_PLAN = 50_000_000   # so'm — shahar agentlar
 DEFAULT_REGION_SALES_PLAN = 60_000_000  # so'm — viloyat agentlar
 DEFAULT_VISIT_PLAN = 750                # hammaga
 
+# Kunlik plan (ball jadvali uchun)
+DEFAULT_CITY_DAILY_PLAN = 2_000_000      # so'm
+DEFAULT_REGION_DAILY_PLAN = 2_307_692    # so'm
+
 
 CITY_AREAS = {
     "chilonzor", "olmazor", "uchtepa", "shayhontohur", "yunusobod",
@@ -851,5 +855,122 @@ def daily_digest() -> str:
     lines.append(f"💀 <b>O'lik do'konlar:</b> <code>{dead_count}</code> ta")
     lines.append("")
     lines.append(_footer("BU OY", _fmt(month_sales)))
+
+    return "\n".join(lines)
+
+
+# ------------------------------------------------------------------
+# Kunlik ball jadvali (agentlar musobaqasi)
+# ------------------------------------------------------------------
+
+def _ball_for_pct(pct: float) -> tuple[str, int]:
+    """Kunlik plan % → (emoji, ball)."""
+    if pct < 80:
+        return ("🔴", 0)
+    if pct < 90:
+        return ("🟡", 1)
+    if pct < 100:
+        return ("🟢", 2)
+    if pct < 150:
+        return ("✅", 3)
+    return ("🔥", 4)
+
+
+def daily_ball_report(category: str) -> str | None:
+    """
+    category: 'city' (shahar) yoki 'region' (viloyat)
+    Bugungi savdo bo'yicha agentlar ball jadvali (musobaqa).
+    """
+    if category == "city":
+        daily_plan = DEFAULT_CITY_DAILY_PLAN
+        cat_name = "SHAHAR"
+        cat_emoji = "🏙️"
+    else:
+        daily_plan = DEFAULT_REGION_DAILY_PLAN
+        cat_name = "VILOYAT"
+        cat_emoji = "🏘️"
+
+    today_iso = date.today().isoformat()
+
+    with get_conn() as conn:
+        rows = conn.execute("""
+            SELECT a.sd_id, a.name,
+                   COALESCE(SUM(o.total_after_discount), 0) AS sales
+            FROM agents a
+            LEFT JOIN orders o ON o.agent_sd_id = a.sd_id
+                AND o.date = ? AND o.status IN (1,2,3)
+            WHERE a.active = 'Y'
+            GROUP BY a.sd_id
+        """, (today_iso,)).fetchall()
+
+    # Faqat ushbu kategoriya agentlari
+    items = []
+    for a in rows:
+        if classify_agent(a["name"]) != category:
+            continue
+        sales = float(a["sales"] or 0)
+        pct = (sales / daily_plan * 100) if daily_plan > 0 else 0
+        emoji, ball = _ball_for_pct(pct)
+        items.append({
+            "name": a["name"],
+            "sales": sales,
+            "pct": pct,
+            "emoji": emoji,
+            "ball": ball,
+        })
+
+    if not items:
+        return None
+
+    # Eng yuqori savdo birinchi
+    items.sort(key=lambda x: -x["sales"])
+
+    lines = [
+        SPACER, SPACER, SPACER,
+        CARD_BORDER,
+        f"🔥 <b>BUGUNGI BALL JADVALI</b>",
+        f"{cat_emoji} <b>{cat_name} AGENTLARI</b>",
+        f"📅 {date.today().strftime('%d.%m.%Y')}",
+        f"🎯 Kunlik plan: <b>{_fmt(daily_plan)}</b>",
+        CARD_BORDER,
+        "",
+    ]
+
+    # Top 3 — medallar bilan, batafsil
+    medals = ["🥇", "🥈", "🥉"]
+    for i, it in enumerate(items[:3]):
+        med = medals[i]
+        lines.append(f"{med} <b>{it['name']}</b>")
+        lines.append(f"     💵 {_fmt(it['sales'])}  ·  {it['emoji']} <b>{it['ball']}</b> ball ({it['pct']:.0f}%)")
+        lines.append("")
+
+    # 4+ — qisqaroq
+    if len(items) > 3:
+        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        for i, it in enumerate(items[3:], start=4):
+            lines.append(f"<code>{i:2d}.</code> {it['name']}")
+            lines.append(f"     {_fmt(it['sales'])}  ·  {it['emoji']} <b>{it['ball']}</b> ball")
+        lines.append("")
+
+    # Statistika
+    stats = {"🔥": 0, "✅": 0, "🟢": 0, "🟡": 0, "🔴": 0}
+    for it in items:
+        stats[it["emoji"]] += 1
+    total_balls = sum(it["ball"] for it in items)
+
+    lines.append(CARD_BORDER)
+    lines.append(f"📊 <b>BUGUNGI STATISTIKA</b>")
+    lines.append(CARD_BORDER)
+    if stats["🔥"]: lines.append(f"🔥 Super kun (150%+): <b>{stats['🔥']}</b> agent")
+    if stats["✅"]: lines.append(f"✅ Reja bajarildi (100-149%): <b>{stats['✅']}</b> agent")
+    if stats["🟢"]: lines.append(f"🟢 Deyarli bajardi (90-99%): <b>{stats['🟢']}</b> agent")
+    if stats["🟡"]: lines.append(f"🟡 Yaqinlashdi (80-89%): <b>{stats['🟡']}</b> agent")
+    if stats["🔴"]: lines.append(f"🔴 Kam sotdi (&lt;80%): <b>{stats['🔴']}</b> agent")
+    lines.append("")
+    lines.append(f"💎 <b>JAMI BALL: {total_balls}</b>")
+    lines.append(CARD_BORDER)
+    lines.append(SPACER)
+    lines.append(SPACER)
+    lines.append(SPACER)
 
     return "\n".join(lines)

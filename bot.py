@@ -804,16 +804,36 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏙️ <b>SHAHAR AGENTLARI</b>\n📅 {today_str}\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
         city_agents,
     )
+    # Shahar agentlari ball jadvali
+    if city_agents:
+        ball_text = reports.daily_ball_report("city")
+        if ball_text:
+            try:
+                await app.bot.send_message(chat_id, ball_text, parse_mode=ParseMode.HTML)
+                await asyncio.sleep(0.5)
+            except Exception as exc:
+                logger.error("Shahar ball jadvali xatosi: %s", exc)
+
     sent += await send_section(
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏘️ <b>VILOYAT AGENTLARI</b>\n📅 {today_str}\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
         region_agents,
     )
+    # Viloyat agentlari ball jadvali
+    if region_agents:
+        ball_text = reports.daily_ball_report("region")
+        if ball_text:
+            try:
+                await app.bot.send_message(chat_id, ball_text, parse_mode=ParseMode.HTML)
+                await asyncio.sleep(0.5)
+            except Exception as exc:
+                logger.error("Viloyat ball jadvali xatosi: %s", exc)
+
     if other_agents:
         sent += await send_section(
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n❓ <b>BOSHQA AGENTLAR</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
             other_agents,
         )
-    logger.info("✓ Guruhga %d ta agent kartochkasi yuborildi", sent)
+    logger.info("✓ Guruhga %d ta agent kartochkasi + 2 ta ball jadvali yuborildi", sent)
     return sent
 
 

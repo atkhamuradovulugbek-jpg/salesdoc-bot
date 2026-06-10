@@ -155,15 +155,5 @@ def setup_scheduler(app: Application) -> None:
         misfire_grace_time=1800,
     )
 
-    # 🧪 BIR MARTALIK TEST — 23:45 da agent kartochkalari guruhga yuboriladi
-    scheduler.add_job(
-        _test_send_agent_cards,
-        CronTrigger(hour=23, minute=45, timezone=TIMEZONE),
-        args=[app],
-        id="onetime_test_cards_23_45",
-        replace_existing=True,
-        misfire_grace_time=600,
-    )
-
     scheduler.start()
-    logger.info("Scheduler ishga tushdi: 03:00 (TO'LIQ), 12:00 (TEZ), 15:00 (TO'LIQ), 20:00 (TEZ+guruh), 23:45 (KARTOCHKA TEST) — %s", TIMEZONE)
+    logger.info("Scheduler ishga tushdi: 03:00 (TO'LIQ), 12:00 (TEZ), 15:00 (TO'LIQ), 20:00 (TEZ+guruh) — %s", TIMEZONE)
