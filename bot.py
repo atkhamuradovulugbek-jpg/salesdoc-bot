@@ -381,7 +381,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         is_set = bool(row and row["value"])
         buttons = []
         if is_set:
-            buttons.append([InlineKeyboardButton("🚀 Hozir sinash (guruhga yuborish)", callback_data="testsend")])
+            buttons.append([InlineKeyboardButton("🚀 Hozir sinash (kartochkalar)", callback_data="testsend")])
+            buttons.append([InlineKeyboardButton("🔥 Ball sinash (jadval)", callback_data="testball")])
         buttons.append([InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")])
         await query.message.edit_text(
             "📤 <b>Guruh sozlash</b>\n\n"
@@ -406,7 +407,44 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         try:
             sent = await send_agent_cards_to_group(context.application)
-            txt = f"✅ <b>Yuborildi!</b>\nJami: <b>{sent}</b> ta agent kartochkasi"
+            txt = f"✅ <b>Yuborildi!</b>\nJami: <b>{sent}</b> ta agent kartochkasi + ball jadvallari"
+        except Exception as exc:
+            txt = f"⚠️ <b>Xato:</b>\n<code>{str(exc)[:300]}</code>"
+        await query.message.edit_text(
+            txt, parse_mode=ParseMode.HTML,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]]),
+        )
+        return
+
+    # --- Ball jadvali sinash (faqat ball jadvallari) ---
+    if data == "testball":
+        await query.message.edit_text(
+            "🔥 <b>Ball jadvallari guruhga yuborilmoqda...</b>",
+            parse_mode=ParseMode.HTML,
+        )
+        try:
+            with get_conn() as conn:
+                row = conn.execute("SELECT value FROM settings WHERE key='report_chat_id'").fetchone()
+            if not row or not row["value"]:
+                txt = "⚠️ Guruh sozlanmagan. Avval /setgroup yozing."
+            else:
+                chat_id = int(row["value"])
+                sent_count = 0
+                # Shahar
+                city_text = reports.daily_ball_report("city")
+                if city_text:
+                    await context.application.bot.send_message(chat_id, city_text, parse_mode=ParseMode.HTML)
+                    sent_count += 1
+                    await asyncio.sleep(0.5)
+                # Viloyat
+                region_text = reports.daily_ball_report("region")
+                if region_text:
+                    await context.application.bot.send_message(chat_id, region_text, parse_mode=ParseMode.HTML)
+                    sent_count += 1
+                if sent_count == 0:
+                    txt = "⚠️ Ball jadvali yaratish uchun ma'lumot yo'q.\n<i>Avval to'liq yangilash yoki kuting.</i>"
+                else:
+                    txt = f"✅ <b>{sent_count} ta ball jadvali guruhga yuborildi!</b>"
         except Exception as exc:
             txt = f"⚠️ <b>Xato:</b>\n<code>{str(exc)[:300]}</code>"
         await query.message.edit_text(
