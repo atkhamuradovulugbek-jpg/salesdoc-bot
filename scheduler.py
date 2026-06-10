@@ -18,6 +18,32 @@ from sync import run_sync
 logger = logging.getLogger(__name__)
 
 
+async def _test_send_to_group(app: Application) -> None:
+    """BIR MARTALIK TEST: bot avtomatik xabar yuborayotganini ko'rsatish uchun."""
+    from db import get_conn
+    with get_conn() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key='report_chat_id'").fetchone()
+    if not row or not row["value"]:
+        logger.warning("Test: guruh sozlanmagan")
+        return
+    chat_id = int(row["value"])
+    from telegram.constants import ParseMode
+    text = (
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        "🧪 <b>AVTOMATIK TEST XABAR</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "✅ Bu xabar bot tomonidan <b>avtomatik</b> yuborildi.\n"
+        "🖥 Source: Railway server (24/7 ishlaydi)\n"
+        "👤 Foydalanuvchi ishtirokisiz.\n\n"
+        "🎯 Demak ertaga 03:00, 12:00, 15:00 va 20:00 da xabarlar ham <b>avtomatik</b> keladi."
+    )
+    try:
+        await app.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
+        logger.info("✅ TEST xabar guruhga yuborildi")
+    except Exception as exc:
+        logger.exception("TEST xabar xatosi: %s", exc)
+
+
 async def _scheduled_full(app: Application, time_label: str) -> None:
     """To'liq sync + admin xabari."""
     logger.info("%s — TO'LIQ sync boshlandi", time_label)
@@ -114,5 +140,15 @@ def setup_scheduler(app: Application) -> None:
         misfire_grace_time=1800,
     )
 
+    # 🧪 BIR MARTALIK TEST — 23:00 da guruhga xabar yuboriladi (keyin olib tashlanadi)
+    scheduler.add_job(
+        _test_send_to_group,
+        CronTrigger(hour=23, minute=0, timezone=TIMEZONE),
+        args=[app],
+        id="onetime_test_23",
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+
     scheduler.start()
-    logger.info("Scheduler ishga tushdi: 03:00 (TO'LIQ), 12:00 (TEZ), 15:00 (TO'LIQ), 20:00 (TEZ+guruh) — %s", TIMEZONE)
+    logger.info("Scheduler ishga tushdi: 03:00 (TO'LIQ), 12:00 (TEZ), 15:00 (TO'LIQ), 20:00 (TEZ+guruh), 23:00 (TEST) — %s", TIMEZONE)
