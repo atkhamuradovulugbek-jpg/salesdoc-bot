@@ -87,18 +87,18 @@ def workdays_in_month(year: int, month: int) -> int:
 
 
 def workdays_passed(year: int, month: int, today: date) -> int:
-    """Bugundan oldingi ish kunlari soni (bugun KIRMAYDI)."""
+    """1-sanadan BUGUN'ga qadar ish kunlari soni (bugun KIRADI). Sales Doctor logikasi."""
     if today.year != year or today.month != month:
         return workdays_in_month(year, month) if (year, month) < (today.year, today.month) else 0
     count = 0
-    for d in range(1, today.day):  # today'ni qo'shmaydi
+    for d in range(1, today.day + 1):  # today INCLUDED
         if date(year, month, d).weekday() != 6:
             count += 1
     return count
 
 
 def workdays_remaining(year: int, month: int, today: date) -> int:
-    """Bugundan to oy oxirigacha ish kunlari (bugun KIRADI)."""
+    """Ertangidan oy oxirigacha ish kunlari (bugun KIRMAYDI). Sales Doctor logikasi."""
     return workdays_in_month(year, month) - workdays_passed(year, month, today)
 
 
