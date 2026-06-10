@@ -940,14 +940,14 @@ def daily_ball_report(category: str) -> str | None:
     for i, it in enumerate(items[:3]):
         med = medals[i]
         lines.append(f"{med} <b>{it['name']}</b>")
-        lines.append(f"     💵 {_fmt(it['sales'])}  ·  {it['emoji']} <b>{it['ball']}</b> ball ({it['pct']:.0f}%)")
+        lines.append(f"     💵 <b>{_fmt(it['sales'])}</b>  ·  {it['emoji']} <b>{it['ball']}</b> ball ({it['pct']:.0f}%)")
         lines.append("")
 
-    # 4+ — har biri orasida bo'sh qator, nomi bold
+    # 4+ — har biri orasida bo'sh qator, nomi va summa bold
     if len(items) > 3:
         for i, it in enumerate(items[3:], start=4):
             lines.append(f"<b>{i}. {it['name']}</b>")
-            lines.append(f"     {_fmt(it['sales'])}  ·  {it['emoji']} <b>{it['ball']}</b> ball")
+            lines.append(f"     <b>{_fmt(it['sales'])}</b>  ·  {it['emoji']} <b>{it['ball']}</b> ball")
             lines.append("")  # bo'sh qator ajratuvchi
 
 
@@ -959,11 +959,11 @@ def daily_ball_report(category: str) -> str | None:
     lines.append(CARD_BORDER)
     lines.append(f"📊 <b>BUGUNGI STATISTIKA</b>")
     lines.append(CARD_BORDER)
-    if stats["🔥"]: lines.append(f"🔥 Super kun (150%+): <b>{stats['🔥']}</b> agent")
-    if stats["✅"]: lines.append(f"✅ Reja bajarildi (100-149%): <b>{stats['✅']}</b> agent")
-    if stats["🟢"]: lines.append(f"🟢 Deyarli bajardi (90-99%): <b>{stats['🟢']}</b> agent")
-    if stats["🟡"]: lines.append(f"🟡 Yaqinlashdi (80-89%): <b>{stats['🟡']}</b> agent")
-    if stats["🔴"]: lines.append(f"🔴 Kam sotdi (&lt;80%): <b>{stats['🔴']}</b> agent")
+    if stats["🔥"]: lines.append(f"🔥 <b>Super kun (150%+):</b> <b>{stats['🔥']}</b> agent")
+    if stats["✅"]: lines.append(f"✅ <b>Reja bajarildi (100-149%):</b> <b>{stats['✅']}</b> agent")
+    if stats["🟢"]: lines.append(f"🟢 <b>Deyarli bajardi (90-99%):</b> <b>{stats['🟢']}</b> agent")
+    if stats["🟡"]: lines.append(f"🟡 <b>Yaqinlashdi (80-89%):</b> <b>{stats['🟡']}</b> agent")
+    if stats["🔴"]: lines.append(f"🔴 <b>Kam sotdi (&lt;80%):</b> <b>{stats['🔴']}</b> agent")
     lines.append(CARD_BORDER)
     lines.append(SPACER)
     lines.append(SPACER)
