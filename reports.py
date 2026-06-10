@@ -143,6 +143,8 @@ def _perf_label(percent: float, kind: str = "monthly") -> str:
 
 
 CARD_BORDER = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+# Telegramda ko'rinmas belgi ("braille blank") — bo'sh joylarni saqlash uchun
+SPACER = "⠀"
 
 
 def agent_report_card(agent_sd_id: str, index: int = None, total: int = None) -> str | None:
@@ -223,6 +225,10 @@ def agent_report_card(agent_sd_id: str, index: int = None, total: int = None) ->
 
     # Matn yig'ish
     lines = []
+    # Yuqorida ochiq joy — kartochkalar bir-biridan ajralib tursin
+    lines.append(SPACER)
+    lines.append(SPACER)
+    lines.append(SPACER)
     lines.append(CARD_BORDER)
     if index and total:
         lines.append(f"📋 <b>{index}/{total}</b>  ·  👤 <b>{agent['name']}</b>")
@@ -264,6 +270,10 @@ def agent_report_card(agent_sd_id: str, index: int = None, total: int = None) ->
     # Pastki yakuniy ramka — kartochkalar ajralib turishi uchun
     lines.append("")
     lines.append(CARD_BORDER)
+    # Pastida ochiq joy — keyingi kartochka boshlanguncha
+    lines.append(SPACER)
+    lines.append(SPACER)
+    lines.append(SPACER)
 
     return "\n".join(lines)
 
