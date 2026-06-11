@@ -578,9 +578,84 @@ def _color_order(days: float) -> int:
     return 2
 
 
+def _calc_stock_days(stock: float, sold: float) -> float:
+    """Necha kunlik qoldiq qolganini hisoblaydi."""
+    if stock <= 0:
+        return 0.0  # Qoldiq yo'q
+    avg_daily = sold / STOCK_AVG_DAYS if sold > 0 else 0
+    return stock / avg_daily if avg_daily > 0 else 9999
+
+
+def low_stock_report(max_days: int = 5) -> list[str]:
+    """
+    Faqat 'max_days' va undan kam kunlik qoldiq qolgan mahsulotlar.
+    0 qoldiqdan boshlab, eng kritik birinchi.
+    """
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT
+                s.product_sd_id,
+                MAX(s.product_name) AS name,
+                SUM(s.quantity) AS stock,
+                MAX(s.updated_at) AS upd,
+                COALESCE((
+                    SELECT SUM(oi.quantity)
+                    FROM order_items oi
+                    JOIN orders o ON o.sd_id = oi.order_sd_id
+                    WHERE oi.product_sd_id = s.product_sd_id
+                      AND o.status IN (1, 2, 3)
+                      AND o.date >= date('now', '-{STOCK_AVG_DAYS} days')
+                ), 0) AS sold
+            FROM stock s
+            GROUP BY s.product_sd_id
+        """).fetchall()
+
+    items = []
+    for r in rows:
+        stock = float(r["stock"] or 0)
+        sold = float(r["sold"] or 0)
+        days = _calc_stock_days(stock, sold)
+        if days <= max_days:
+            items.append({"name": r["name"], "stock": stock, "days": days})
+
+    if not items:
+        return [f"🔴 <b>TEZ TUGAYDIGAN MAHSULOTLAR</b>\n\n<i>≤ {max_days} kunlik mahsulot yo'q.</i>"]
+
+    # Eng kritik (kam kunlik) birinchi
+    items.sort(key=lambda x: x["days"])
+
+    last_updated = rows[0]["upd"] if rows else ""
+
+    def _make_header(part: str = "") -> str:
+        title = f"🔴 <b>TEZ TUGAYDIGAN MAHSULOTLAR</b>"
+        if part:
+            title += f" <i>({part})</i>"
+        return (
+            f"{title}\n"
+            f"<i>≤ {max_days} kunlik qoldiq · jami {len(items)} ta</i>\n"
+            f"<i>yangilangan: {last_updated[:19]}</i>\n"
+        )
+
+    messages = []
+    current = _make_header()
+    for it in items:
+        color = _stock_color(it["days"])
+        days_text = _days_str(it["days"])
+        line = f"\n{color} {it['name']} — <b>{_num(it['stock'])}</b> blok / <b>{days_text}</b> kunlik"
+        if len(current) + len(line) > 3800:
+            messages.append(current)
+            part_n = len(messages) + 1
+            current = _make_header(f"{part_n}-qism") + line
+        else:
+            current += line
+    if current:
+        messages.append(current)
+    return messages
+
+
 def stock_report() -> list[str]:
     """
-    Kategoriya bo'yicha sklad ostatka.
+    Kategoriya bo'yicha sklad ostatka (0 qoldiq ham ko'rsatadi).
     Ichida: 🔴 → 🟡 → 🟢 (kritik birinchi).
     Bir xil rangli mahsulotlar alifbo tartibida.
     """
@@ -603,7 +678,6 @@ def stock_report() -> list[str]:
             FROM stock s
             LEFT JOIN products p ON p.sd_id = s.product_sd_id
             LEFT JOIN categories cat ON cat.sd_id = p.category
-            WHERE s.quantity > 0
             GROUP BY s.product_sd_id
         """).fetchall()
 
@@ -615,8 +689,7 @@ def stock_report() -> list[str]:
     for r in rows:
         stock = float(r["stock"] or 0)
         sold = float(r["sold"] or 0)
-        avg_daily = sold / STOCK_AVG_DAYS if sold > 0 else 0
-        days = stock / avg_daily if avg_daily > 0 else 9999
+        days = _calc_stock_days(stock, sold)
         item = {"name": r["name"], "stock": stock, "days": days}
         by_cat.setdefault(r["cat_name"], []).append(item)
 

@@ -53,7 +53,8 @@ MAIN_MENU_KEYBOARD = InlineKeyboardMarkup([
     [InlineKeyboardButton("🚶 Vizitlar", callback_data="menu:visits"),
      InlineKeyboardButton("🏆 TOP tovarlar", callback_data="menu:top_products")],
     [InlineKeyboardButton("📦 Sklad ostatka", callback_data="menu:stock"),
-     InlineKeyboardButton("💀 O'lik do'konlar", callback_data="menu:dead_outlets")],
+     InlineKeyboardButton("🔴 Tez tugaydiganlar", callback_data="menu:low_stock")],
+    [InlineKeyboardButton("💀 O'lik do'konlar", callback_data="menu:dead_outlets")],
     [InlineKeyboardButton("📊 Agent planlari", callback_data="menu:plans"),
      InlineKeyboardButton("📤 Guruh sozlash", callback_data="menu:groupset")],
     [InlineKeyboardButton("🔄 Tez yangilash", callback_data="menu:sync_now"),
@@ -248,6 +249,24 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             parse_mode=ParseMode.HTML,
             reply_markup=date_picker_keyboard("topprods"),
         )
+        return
+
+    if data == "menu:low_stock":
+        messages = reports.low_stock_report(max_days=5)
+        await query.message.edit_text(
+            _truncate(messages[0]), parse_mode=ParseMode.HTML,
+        )
+        for msg in messages[1:-1]:
+            await query.message.reply_text(_truncate(msg), parse_mode=ParseMode.HTML)
+        if len(messages) > 1:
+            await query.message.reply_text(
+                _truncate(messages[-1]), parse_mode=ParseMode.HTML,
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Bosh menyu", callback_data="back:main")]]),
+            )
+        else:
+            await query.message.edit_reply_markup(
+                InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]])
+            )
         return
 
     if data == "menu:stock":
