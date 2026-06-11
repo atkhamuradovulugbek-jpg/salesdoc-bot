@@ -340,26 +340,30 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
                         territory=excluded.territory, updated_at=excluded.updated_at
                 """, client_rows)
 
+            # MUHIM: tortilgan sana orali ichidagi BARCHA eski orderlarni avval o'chiramiz.
+            # Bu Sales Doctor'da bekor qilingan orderlarni ham bazadan tozalashga yordam beradi.
+            # Aks holda eski (bekor qilingan) orderlar summasiga qo'shilishda qoladi.
+            old_order_ids = conn.execute(
+                "SELECT sd_id FROM orders WHERE date >= ? AND date <= ?",
+                (lookback_from, today),
+            ).fetchall()
+            old_ids = [r["sd_id"] for r in old_order_ids]
+            if old_ids:
+                CHUNK = 500
+                for i in range(0, len(old_ids), CHUNK):
+                    chunk = old_ids[i:i + CHUNK]
+                    placeholders = ",".join("?" * len(chunk))
+                    conn.execute(f"DELETE FROM order_items WHERE order_sd_id IN ({placeholders})", chunk)
+                conn.execute("DELETE FROM orders WHERE date >= ? AND date <= ?", (lookback_from, today))
+                logger.info("⏏ %d ta eski order o'chirildi (sana: %s — %s)", len(old_ids), lookback_from, today)
+
+            # Yangi orderlarni yozish
             conn.executemany("""
                 INSERT INTO orders (sd_id, date, status, agent_sd_id, client_sd_id, total_after_discount)
                 VALUES (?, ?, ?, ?, ?, ?)
-                ON CONFLICT(sd_id) DO UPDATE SET
-                    date=excluded.date, status=excluded.status,
-                    agent_sd_id=excluded.agent_sd_id, client_sd_id=excluded.client_sd_id,
-                    total_after_discount=excluded.total_after_discount
             """, order_rows)
 
-            # Order items — eski yozuvlarni o'chirib, yangini yozish
-            if order_sd_ids:
-                # Bulk DELETE (chunkable)
-                CHUNK = 500
-                for i in range(0, len(order_sd_ids), CHUNK):
-                    chunk = order_sd_ids[i:i + CHUNK]
-                    placeholders = ",".join("?" * len(chunk))
-                    conn.execute(
-                        f"DELETE FROM order_items WHERE order_sd_id IN ({placeholders})",
-                        chunk,
-                    )
+            if item_rows:
                 conn.executemany("""
                     INSERT INTO order_items (order_sd_id, product_sd_id, product_name, quantity, summa)
                     VALUES (?, ?, ?, ?, ?)
