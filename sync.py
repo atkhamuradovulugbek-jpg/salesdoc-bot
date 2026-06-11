@@ -80,9 +80,10 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
     now = _now_str()
     today = date.today().isoformat()
 
-    # FAST mode: faqat bugungi buyurtmalar. FULL mode: 90 kun (o'lik do'kon uchun).
+    # FAST mode: shu oy boshidan (oylik summalar Sales Doctor bilan doim to'g'ri).
+    # FULL mode: 90 kun (o'lik do'kon va eski hisobotlar uchun).
     if mode == "fast":
-        lookback_from = today
+        lookback_from = date.today().replace(day=1).isoformat()
     else:
         lookback_from = (date.today() - timedelta(days=DEAD_OUTLET_LOOKBACK_DAYS)).isoformat()
 
