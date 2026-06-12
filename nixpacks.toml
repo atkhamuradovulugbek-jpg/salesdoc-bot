@@ -1,2 +1,0 @@
-[phases.setup]
-nixPkgs = ["libjpeg", "zlib", "freetype", "lcms2", "libwebp"]

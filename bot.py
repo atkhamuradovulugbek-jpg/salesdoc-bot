@@ -103,6 +103,14 @@ async def cleargroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("✅ Guruh sozlamasi o'chirildi. Endi hisobot yuborilmaydi.")
 
 
+async def version_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    img_status = "✅ RASM rejimi — Pillow ishlaydi" if _IMAGE_REPORTS_OK else "❌ MATN rejimi — Pillow yuklanmagan"
+    await update.message.reply_text(
+        f"🤖 <b>Bot versiyasi:</b> rasm-kartochkalar\n{img_status}",
+        parse_mode=ParseMode.HTML,
+    )
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_allowed(update.effective_user.id):
         await deny(update)
@@ -970,6 +978,7 @@ def main() -> None:
     )
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("version", version_cmd))
     app.add_handler(CommandHandler("setgroup", setgroup_cmd))
     app.add_handler(CommandHandler("cleargroup", cleargroup_cmd))
     app.add_handler(CallbackQueryHandler(callback_handler))
