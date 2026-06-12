@@ -18,7 +18,13 @@ from telegram.ext import (
 )
 
 import reports
-import image_reports
+try:
+    import image_reports
+    _IMAGE_REPORTS_OK = True
+except Exception as _img_err:
+    _IMAGE_REPORTS_OK = False
+    image_reports = None  # type: ignore
+    logging.getLogger(__name__).error("image_reports yuklanmadi: %s", _img_err)
 from config import ADMIN_IDS, ALLOWED_IDS, TELEGRAM_BOT_TOKEN
 from db import get_conn, init_db
 from sync import run_sync
@@ -860,13 +866,20 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
         total = len(group)
         for i, a in enumerate(group, 1):
             try:
-                png = image_reports.render_agent_card(a["sd_id"])
-                if not png:
-                    continue
-                caption = f"👤 <b>{a['name']}</b>  ·  📅 {today_str}  ·  ({i}/{total})"
-                await app.bot.send_photo(
-                    chat_id, photo=png, caption=caption, parse_mode=ParseMode.HTML
-                )
+                if _IMAGE_REPORTS_OK:
+                    png = image_reports.render_agent_card(a["sd_id"])
+                    if not png:
+                        continue
+                    caption = f"👤 <b>{a['name']}</b>  ·  📅 {today_str}  ·  ({i}/{total})"
+                    await app.bot.send_photo(
+                        chat_id, photo=png, caption=caption, parse_mode=ParseMode.HTML
+                    )
+                else:
+                    # Pillow yo'q bo'lsa — eski matn formatda yuborish
+                    text = reports.agent_report_card(a["sd_id"], index=i, total=total)
+                    if not text:
+                        continue
+                    await app.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
                 cnt += 1
                 await asyncio.sleep(0.6)
             except Exception as exc:
@@ -875,14 +888,20 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
 
     async def send_ball_image(category: str, label: str) -> None:
         try:
-            png = image_reports.render_ball_table(category)
-            if not png:
-                logger.info("Ball jadvali (%s) — ma'lumot yo'q", category)
-                return
-            caption = f"🔥 <b>BUGUNGI BALL JADVALI</b>  ·  {label}  ·  📅 {today_str}"
-            await app.bot.send_photo(
-                chat_id, photo=png, caption=caption, parse_mode=ParseMode.HTML
-            )
+            if _IMAGE_REPORTS_OK:
+                png = image_reports.render_ball_table(category)
+                if not png:
+                    logger.info("Ball jadvali (%s) — ma'lumot yo'q", category)
+                    return
+                caption = f"🔥 <b>BUGUNGI BALL JADVALI</b>  ·  {label}  ·  📅 {today_str}"
+                await app.bot.send_photo(
+                    chat_id, photo=png, caption=caption, parse_mode=ParseMode.HTML
+                )
+            else:
+                # Eski matn formatda
+                ball_text = reports.daily_ball_report(category)
+                if ball_text:
+                    await app.bot.send_message(chat_id, ball_text, parse_mode=ParseMode.HTML)
             await asyncio.sleep(0.6)
         except Exception as exc:
             logger.error("Ball jadvali (%s) xatosi: %s", category, exc)
