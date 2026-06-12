@@ -169,52 +169,66 @@ def _draw_cell(draw, x, y, w, h, bg=None, border=BORDER_GRAY, border_w: int = 2)
 # Status matnlari (suratdagi izohlar uchun)
 # ------------------------------------------------------------------
 
-def _bajardi_text(pct: float) -> str:
-    if pct < 50:
-        return ("QIZIL HOLAT — Oylik plan bajarilishi past darajada. Savdo "
-                "faolligini oshirish, ko'proq do'konlarga kirish va assortimentni "
-                "kengroq taklif qilish zarur. Oylik ish jarayoni davom etmoqda. "
-                "Hozirgi tempni nazorat qilib borish muhim.")
-    if pct < 80:
-        return ("SARIQ HOLAT — Plan asta-sekin bajarilmoqda, lekin tempni oshirish "
-                "kerak. Faol agentlik va tezroq sotuvlar talab etiladi.")
-    if pct < 100:
-        return ("YAXSHI HOLAT — Plan bajarilish chizig'iga juda yaqin. Yakuniy "
-                "harakatlar bilan oyni 100% yopish mumkin.")
-    return ("SUPER NATIJA — Oylik plan oshirib bajarildi! Bu agent uchun katta "
-            "natija. Shu temp saqlansin.")
+def _remaining_suffix(remaining_wd: int) -> str:
+    if remaining_wd == 5:
+        return "5 ish kuni qoldi. Harakatni kuchaytirish kerak!"
+    if remaining_wd == 4:
+        return "4 ish kuni qoldi. Sezilarli harakat kerak!"
+    if remaining_wd == 3:
+        return "3 ish kuni qoldi. Juda qiyin!"
+    if remaining_wd == 2:
+        return "2 ish kuni qoldi. Katta harakat kerak!"
+    if remaining_wd == 1:
+        return "1 ish kuni qoldi!"
+    if remaining_wd == 0:
+        return "Oy tugadi!"
+    return "Oylik ish jarayoni davom etmoqda."
+
+
+def _bajardi_text(pct: float, remaining_wd: int = 15) -> str:
+    if pct < 70:
+        status = "QIZIL HOLAT — Oylik plan bajarilishi juda past. Savdo faolligini keskin oshirish zarur."
+    elif pct < 90:
+        status = "SARIQ HOLAT — Plan asta-sekin bajarilmoqda, lekin tempni sezilarli oshirish kerak."
+    elif pct < 100:
+        status = "YASHIL HOLAT — Plan bajarilish chizig'iga yaqin. Yakuniy harakatlar bilan 100% mumkin."
+    elif pct < 110:
+        status = "TABRIKLAYMIZ — Oylik plan bajarildi! Shu tempni saqlab yuqori natijaga erishing."
+    else:
+        status = "SUPER NATIJA — Oylik plan oshirib bajarildi! Bu juda kuchli ko'rsatkich."
+    return status + " " + _remaining_suffix(remaining_wd)
 
 
 def _prognoz_text(pct: float) -> str:
+    p = round(pct)
     if pct < 70:
-        return ("OGOH PROGNOZ — Hozirgi temp bilan oy oxirida plan to'liq "
-                "bajarilmasligi mumkin. Kunlik savdoni tezroq oshirish kerak.")
+        return (f"PROGNOZ XAVFLI — Hozirgi temp bilan plan atigi {p}% darajada "
+                "yopilishi mumkin. Kunlik savdoni tezkor oshirish kerak.")
+    if pct < 90:
+        return (f"PROGNOZ PAST — Hozirgi temp bilan plan taxminan {p}% darajada "
+                "bajarilishi mumkin. Tempni sezilarli oshirish zarur.")
     if pct < 100:
-        return ("O'RTACHA PROGNOZ — Hozirgi temp bilan plan to'liq bajarilmasligi "
-                "mumkin. Kunlik harakatlarni biroz oshirish lozim.")
+        return (f"PROGNOZ CHEGARADA — Hozirgi temp bilan plan {p}% atrofida "
+                "bajarilishi mumkin. Qo'shimcha harakat kerak.")
     if pct < 110:
-        return ("YAXSHI PROGNOZ — Hozirgi temp bilan oy oxirida plan to'liq "
-                "bajariladi. Tempni saqlab qolish kifoya.")
-    return (f"SUPER PROGNOZ — Hozirgi temp bilan oy oxirida plan {pct:.0f}% "
-            "darajada bajarilishi mumkin. Bu juda kuchli ko'rsatkich. Siz yuqori "
-            "natija zonasidasiz. Endi shu tempni saqlab qolish va natijani yanada "
-            "mustahkamlash kerak!")
+        return (f"PROGNOZ YAXSHI — Hozirgi temp bilan plan {p}% darajada "
+                "bajarilishi mumkin. Tempni saqlab qolish kifoya.")
+    return (f"SUPER PROGNOZ — Hozirgi temp bilan oy oxirida plan {p}% darajada "
+            "bajarilishi mumkin! Bu juda kuchli ko'rsatkich.")
 
 
-def _kunlik_text(pct: float) -> str:
-    if pct < 50:
-        return ("BUGUN PAST — Bugungi kunlik plan bajarilmadi. Faolligingizni "
-                "oshirish kerak.")
-    if pct < 100:
-        return ("BUGUN O'RTACHA — Kunlik plan to'liq bajarilmadi. Ertaga ko'proq "
-                "harakat qiling.")
-    if pct < 110:
-        return ("BUGUN YAXSHI — Kunlik plan to'liq bajarildi. Shu tempda davom "
-                "eting.")
-    return ("SUPER NATIJA — Bugungi kunlik plan 110% dan ham yuqori darajada "
-            "bajarildi. Bu juda kuchli savdo ko'rsatkichi. Shu ish tempini saqlab "
-            "qolish tavsiya etiladi. Oylik ish jarayoni davom etmoqda. Kunlik "
-            "natijalarni nazorat qilib borish muhim.")
+def _kunlik_text(pct: float, remaining_wd: int = 15) -> str:
+    if pct < 70:
+        status = "QIZIL HOLAT — Bugungi kunlik plan juda past darajada bajarildi."
+    elif pct < 90:
+        status = "SARIQ HOLAT — Kunlik plan to'liq bajarilmadi. Faollikni oshirish kerak."
+    elif pct < 100:
+        status = "YASHIL HOLAT — Kunlik planga yaqin. Biroz qo'shimcha harakat kerak."
+    elif pct < 110:
+        status = "TABRIKLAYMIZ — Bugungi kunlik plan bajarildi! Shu tempda davom eting."
+    else:
+        status = "SUPER NATIJA — Kunlik plan oshirib bajarildi! Bu kuchli savdo ko'rsatkichi."
+    return status + " " + _remaining_suffix(remaining_wd)
 
 
 def _bg_for_pct(pct: float, has_target: bool = True) -> tuple[int, int, int]:
@@ -222,7 +236,7 @@ def _bg_for_pct(pct: float, has_target: bool = True) -> tuple[int, int, int]:
         return LIGHT_ROW
     if pct >= 100:
         return GREEN_OK_BG
-    if pct >= 80:
+    if pct >= 70:
         return YELLOW_MID_BG
     return RED_BAD_BG
 
@@ -345,20 +359,20 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     assert C1 + C2 + C3 + C4 + C5_LBL + C5_VAL == W
 
     # Row balandliklari
-    H_HEADER = 46
-    H_PLAN = 46
-    H_BAJARDI = 110
-    H_QOLDIQ = 46
-    H_PROGNOZ = 110
-    H_KUNLIK_KER = 46
-    H_KUNLIK_BAJ = 110
+    H_HEADER = 50
+    H_PLAN = 50
+    H_BAJARDI = 130
+    H_QOLDIQ = 50
+    H_PROGNOZ = 130
+    H_KUNLIK_KER = 50
+    H_KUNLIK_BAJ = 130
 
     main_height = (H_HEADER + H_PLAN + H_BAJARDI + H_QOLDIQ +
                    H_PROGNOZ + H_KUNLIK_KER + H_KUNLIK_BAJ)
 
     # Pastida vizit jadvali + sana
     GAP = 24
-    H_VISIT_ROW = 36
+    H_VISIT_ROW = 40
     visit_rows = 5
     H_VISIT = H_VISIT_ROW * visit_rows
     H_SANA = 40
@@ -368,15 +382,15 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     draw = ImageDraw.Draw(img)
 
     # ----- Fontlar -----
-    f_h_lbl = _font(20, bold=True)         # Header label (AGENT, IYUN OYI)
+    f_h_lbl = _font(22, bold=True)         # Header label (AGENT, IYUN OYI)
     f_h_val = _font(22, bold=True)         # Agent nomi
-    f_lbl = _font(18, bold=True)           # row labels (chap ustun)
-    f_money = _font(22, bold=True)         # asosiy summalar
-    f_money_small = _font(19, bold=True)
-    f_pct = _font(26, bold=True)
-    f_note = _font(15)                     # Izoh matni
-    f_kun_lbl = _font(15, bold=True)
-    f_kun_val = _font(20, bold=True)
+    f_lbl = _font(20, bold=True)           # row labels (chap ustun)
+    f_money = _font(24, bold=True)         # asosiy summalar
+    f_money_small = _font(22, bold=True)
+    f_pct = _font(28, bold=True)
+    f_note = _font(18)                     # Izoh matni
+    f_kun_lbl = _font(17, bold=True)
+    f_kun_val = _font(22, bold=True)
 
     # ============================================================
     # ROW 0 — Header (AGENT | nomi | (empty) | IYUN OYI)
@@ -447,8 +461,8 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     # Izoh ustuni — PLAN BAJARDI + PLAN QOLDIQ ikkisini qamrab oladi
     note_h = H_BAJARDI + H_QOLDIQ
     _draw_cell(draw, x, y, C4, note_h, bg=LIGHT_ROW)
-    _draw_wrapped(draw, _bajardi_text(m["plan_pct"]),
-                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=3)
+    _draw_wrapped(draw, _bajardi_text(m["plan_pct"], m["remaining_wd"]),
+                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=4)
     x += C4
     # ISHLAB BO'LINDI label
     _draw_cell(draw, x, y, C5_LBL, H_BAJARDI, bg=BG_CREAM)
@@ -512,7 +526,7 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     note_h_b = H_PROGNOZ + H_KUNLIK_KER
     _draw_cell(draw, x, y, C4, note_h_b, bg=LIGHT_ROW)
     _draw_wrapped(draw, _prognoz_text(m["prognoz_pct"]),
-                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=3)
+                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=4)
     x += C4
     # O'ng tomonda (C5) — bo'sh hujayralar qo'shamiz, vertical span
     _draw_cell(draw, x, y, C5_LBL + C5_VAL, note_h_b, bg=BG_CREAM)
@@ -559,8 +573,8 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
                         WHITE if kunlik_bg != LIGHT_ROW else TEXT_DARK)
     x += C3
     _draw_cell(draw, x, y, C4, H_KUNLIK_BAJ, bg=LIGHT_ROW)
-    _draw_wrapped(draw, _kunlik_text(m["daily_pct"]),
-                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=3)
+    _draw_wrapped(draw, _kunlik_text(m["daily_pct"], m["remaining_wd"]),
+                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=4)
     x += C4
     _draw_cell(draw, x, y, C5_LBL + C5_VAL, H_KUNLIK_BAJ, bg=BG_CREAM)
     y += H_KUNLIK_BAJ
@@ -573,8 +587,8 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     v_w_lbl = 280
     v_w_val = 220
     v_total = v_w_lbl + v_w_val
-    f_v_lbl = _font(15, bold=True)
-    f_v_val = _font(16, bold=True)
+    f_v_lbl = _font(17, bold=True)
+    f_v_val = _font(18, bold=True)
 
     visit_rows_data = [
         ("VIZIT PLAN:", str(m["visit_plan"]), GREEN_HEADER, WHITE),
@@ -675,19 +689,19 @@ def render_ball_table(category: str) -> Optional[bytes]:
     C_BALL = 130
     assert C_ORIN + C_AGENT + C_SAVDO + C_RANG + C_BALL == W
 
-    H_HEADER = 50
-    H_ROW = 44
-    H_TITLE = 60
+    H_HEADER = 56
+    H_ROW = 50
+    H_TITLE = 68
     H = H_TITLE + H_HEADER + H_ROW * len(items) + 20
 
     img = Image.new("RGB", (W, H), BG_CREAM)
     draw = ImageDraw.Draw(img)
 
-    f_title = _font(22, bold=True)
-    f_h = _font(18, bold=True)
-    f_row = _font(17, bold=True)
-    f_orin = _font(18, bold=True)
-    f_ball = _font(20, bold=True)
+    f_title = _font(24, bold=True)
+    f_h = _font(20, bold=True)
+    f_row = _font(20, bold=True)
+    f_orin = _font(20, bold=True)
+    f_ball = _font(22, bold=True)
 
     # Sarlavha
     cat_label = "SHAHAR AGENTLARI" if category == "city" else "VILOYAT AGENTLARI"
