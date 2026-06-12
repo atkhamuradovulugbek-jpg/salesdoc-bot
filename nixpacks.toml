@@ -1,5 +1,2 @@
 [phases.setup]
-nixPkgs = ["libjpeg", "zlib", "freetype", "lcms2", "libwebp", "libtiff", "libxcb"]
-
-[phases.install]
-cmds = ["pip install -r requirements.txt"]
+nixPkgs = ["libjpeg", "zlib", "freetype", "lcms2", "libwebp"]
