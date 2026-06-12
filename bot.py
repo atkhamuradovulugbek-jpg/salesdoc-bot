@@ -427,13 +427,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     # --- Hozir sinash (qo'lda guruhga yuborish) ---
     if data == "testsend":
+        img_status = "🖼 <b>RASM</b> rejimi (Pillow OK)" if _IMAGE_REPORTS_OK else "📝 <b>MATN</b> rejimi (Pillow yo'q!)"
         await query.message.edit_text(
-            "🚀 <b>Hozir guruhga yuborilmoqda...</b>\n<i>17-18 ta agent uchun ~30 sekund.</i>",
+            f"🚀 <b>Hozir guruhga yuborilmoqda...</b>\n{img_status}\n<i>~30 sekund kutilsin.</i>",
             parse_mode=ParseMode.HTML,
         )
         try:
             sent = await send_agent_cards_to_group(context.application)
-            txt = f"✅ <b>Yuborildi!</b>\nJami: <b>{sent}</b> ta agent kartochkasi + ball jadvallari"
+            mode = "rasm" if _IMAGE_REPORTS_OK else "matn"
+            txt = f"✅ <b>Yuborildi!</b>\nJami: <b>{sent}</b> ta agent kartochkasi ({mode} ko'rinishda) + ball jadvallari"
         except Exception as exc:
             txt = f"⚠️ <b>Xato:</b>\n<code>{str(exc)[:300]}</code>"
         await query.message.edit_text(
@@ -944,6 +946,16 @@ async def notify_admins(app: Application, text: str) -> None:
 async def post_init(app: Application) -> None:
     from scheduler import setup_scheduler
     setup_scheduler(app)
+    # Adminlarga bot holati haqida xabar
+    if _IMAGE_REPORTS_OK:
+        status_msg = "✅ Bot ishga tushdi\n🖼 <b>RASM rejimi</b> — Pillow OK, kartochkalar rasm ko'rinishida yuboriladi."
+    else:
+        status_msg = "⚠️ Bot ishga tushdi\n📝 <b>MATN rejimi</b> — Pillow o'rnatilmagan, kartochkalar matn ko'rinishida yuboriladi.\n<i>Railway loglarini tekshiring.</i>"
+    for admin_id in ADMIN_IDS:
+        try:
+            await app.bot.send_message(admin_id, status_msg, parse_mode=ParseMode.HTML)
+        except Exception:
+            pass
 
 
 def main() -> None:
