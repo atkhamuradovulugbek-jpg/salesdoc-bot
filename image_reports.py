@@ -681,27 +681,27 @@ def render_ball_table(category: str) -> Optional[bytes]:
         return None
 
     # O'lcham va layout
-    W = 920
-    C_ORIN = 70
-    C_AGENT = 420
-    C_SAVDO = 200
-    C_RANG = 100
-    C_BALL = 130
+    W = 1240
+    C_ORIN = 95
+    C_AGENT = 565
+    C_SAVDO = 270
+    C_RANG = 135
+    C_BALL = 175
     assert C_ORIN + C_AGENT + C_SAVDO + C_RANG + C_BALL == W
 
-    H_HEADER = 56
-    H_ROW = 50
-    H_TITLE = 68
-    H = H_TITLE + H_HEADER + H_ROW * len(items) + 20
+    H_HEADER = 76
+    H_ROW = 68
+    H_TITLE = 92
+    H = H_TITLE + H_HEADER + H_ROW * len(items) + 24
 
     img = Image.new("RGB", (W, H), BG_CREAM)
     draw = ImageDraw.Draw(img)
 
-    f_title = _font(24, bold=True)
-    f_h = _font(20, bold=True)
-    f_row = _font(20, bold=True)
-    f_orin = _font(20, bold=True)
-    f_ball = _font(22, bold=True)
+    f_title = _font(30, bold=True)
+    f_h = _font(26, bold=True)
+    f_row = _font(26, bold=True)
+    f_orin = _font(26, bold=True)
+    f_ball = _font(28, bold=True)
 
     # Sarlavha
     cat_label = "SHAHAR AGENTLARI" if category == "city" else "VILOYAT AGENTLARI"
@@ -743,7 +743,7 @@ def render_ball_table(category: str) -> Optional[bytes]:
         x += C_SAVDO
         # Rang (aylana)
         _draw_cell(draw, x, y, C_RANG, H_ROW, bg=bg)
-        _draw_color_circle(draw, x + C_RANG // 2, y + H_ROW // 2, 14, it["color"])
+        _draw_color_circle(draw, x + C_RANG // 2, y + H_ROW // 2, 20, it["color"])
         x += C_RANG
         # Ball
         _draw_cell(draw, x, y, C_BALL, H_ROW, bg=bg)
@@ -767,6 +767,5 @@ def _draw_color_circle(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, colo
     draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=c, outline=(60, 60, 60), width=2)
     # Yashil aylana ichida ✓ belgi
     if color == "green":
-        # Galochka chizamiz
-        draw.line([(cx - 6, cy + 1), (cx - 1, cy + 6)], fill=WHITE, width=3)
-        draw.line([(cx - 1, cy + 6), (cx + 7, cy - 5)], fill=WHITE, width=3)
+        draw.line([(cx - 8, cy + 2), (cx - 2, cy + 8)], fill=WHITE, width=4)
+        draw.line([(cx - 2, cy + 8), (cx + 9, cy - 7)], fill=WHITE, width=4)
