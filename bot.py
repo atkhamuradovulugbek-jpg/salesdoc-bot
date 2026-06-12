@@ -18,6 +18,7 @@ from telegram.ext import (
 )
 
 import reports
+import image_reports
 from config import ADMIN_IDS, ALLOWED_IDS, TELEGRAM_BOT_TOKEN
 from db import get_conn, init_db
 from sync import run_sync
@@ -435,10 +436,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
         return
 
-    # --- Ball jadvali sinash (faqat ball jadvallari) ---
+    # --- Ball jadvali sinash (faqat ball jadvallari RASM) ---
     if data == "testball":
         await query.message.edit_text(
-            "🔥 <b>Ball jadvallari guruhga yuborilmoqda...</b>",
+            "🔥 <b>Ball jadvallari (rasm) guruhga yuborilmoqda...</b>",
             parse_mode=ParseMode.HTML,
         )
         try:
@@ -448,22 +449,31 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 txt = "⚠️ Guruh sozlanmagan. Avval /setgroup yozing."
             else:
                 chat_id = int(row["value"])
+                today_str = date.today().strftime("%d.%m.%Y")
                 sent_count = 0
                 # Shahar
-                city_text = reports.daily_ball_report("city")
-                if city_text:
-                    await context.application.bot.send_message(chat_id, city_text, parse_mode=ParseMode.HTML)
+                city_png = image_reports.render_ball_table("city")
+                if city_png:
+                    await context.application.bot.send_photo(
+                        chat_id, photo=city_png,
+                        caption=f"🔥 <b>BUGUNGI BALL JADVALI</b>  ·  SHAHAR AGENTLARI  ·  📅 {today_str}",
+                        parse_mode=ParseMode.HTML,
+                    )
                     sent_count += 1
                     await asyncio.sleep(0.5)
                 # Viloyat
-                region_text = reports.daily_ball_report("region")
-                if region_text:
-                    await context.application.bot.send_message(chat_id, region_text, parse_mode=ParseMode.HTML)
+                region_png = image_reports.render_ball_table("region")
+                if region_png:
+                    await context.application.bot.send_photo(
+                        chat_id, photo=region_png,
+                        caption=f"🔥 <b>BUGUNGI BALL JADVALI</b>  ·  VILOYAT AGENTLARI  ·  📅 {today_str}",
+                        parse_mode=ParseMode.HTML,
+                    )
                     sent_count += 1
                 if sent_count == 0:
                     txt = "⚠️ Ball jadvali yaratish uchun ma'lumot yo'q.\n<i>Avval to'liq yangilash yoki kuting.</i>"
                 else:
-                    txt = f"✅ <b>{sent_count} ta ball jadvali guruhga yuborildi!</b>"
+                    txt = f"✅ <b>{sent_count} ta ball jadvali (rasm) guruhga yuborildi!</b>"
         except Exception as exc:
             txt = f"⚠️ <b>Xato:</b>\n<code>{str(exc)[:300]}</code>"
         await query.message.edit_text(
@@ -806,8 +816,9 @@ async def send_daily_digest(app: Application) -> None:
 
 
 async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> int:
-    """Har faol agent uchun hisobot kartochkasini guruhga yuboradi.
-    Shahar agentlari va viloyat agentlari alohida guruhlanadi."""
+    """Har faol agent uchun hisobot kartochkasini RASM ko'rinishida guruhga yuboradi.
+    Shahar agentlari va viloyat agentlari alohida guruhlanadi.
+    Har bo'lim oxirida ball jadvali rasmi yuboriladi."""
     if chat_id is None:
         with get_conn() as conn:
             row = conn.execute("SELECT value FROM settings WHERE key='report_chat_id'").fetchone()
@@ -837,60 +848,65 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
     sent = 0
 
     async def send_section(header: str, group: list) -> int:
+        """Bo'lim sarlavhasi + har agent uchun PNG kartochka (caption bilan)."""
         if not group:
             return 0
         try:
             await app.bot.send_message(chat_id, header, parse_mode=ParseMode.HTML)
+            await asyncio.sleep(0.4)
         except Exception as exc:
             logger.error("Section header yuborishda xato: %s", exc)
         cnt = 0
         total = len(group)
         for i, a in enumerate(group, 1):
-            text = reports.agent_report_card(a["sd_id"], index=i, total=total)
-            if not text:
-                continue
             try:
-                await app.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
+                png = image_reports.render_agent_card(a["sd_id"])
+                if not png:
+                    continue
+                caption = f"👤 <b>{a['name']}</b>  ·  📅 {today_str}  ·  ({i}/{total})"
+                await app.bot.send_photo(
+                    chat_id, photo=png, caption=caption, parse_mode=ParseMode.HTML
+                )
                 cnt += 1
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.6)
             except Exception as exc:
                 logger.error("Kartochka yuborishda xato (%s): %s", a["name"], exc)
         return cnt
+
+    async def send_ball_image(category: str, label: str) -> None:
+        try:
+            png = image_reports.render_ball_table(category)
+            if not png:
+                logger.info("Ball jadvali (%s) — ma'lumot yo'q", category)
+                return
+            caption = f"🔥 <b>BUGUNGI BALL JADVALI</b>  ·  {label}  ·  📅 {today_str}"
+            await app.bot.send_photo(
+                chat_id, photo=png, caption=caption, parse_mode=ParseMode.HTML
+            )
+            await asyncio.sleep(0.6)
+        except Exception as exc:
+            logger.error("Ball jadvali (%s) xatosi: %s", category, exc)
 
     sent += await send_section(
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏙️ <b>SHAHAR AGENTLARI</b>\n📅 {today_str}\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
         city_agents,
     )
-    # Shahar agentlari ball jadvali
     if city_agents:
-        ball_text = reports.daily_ball_report("city")
-        if ball_text:
-            try:
-                await app.bot.send_message(chat_id, ball_text, parse_mode=ParseMode.HTML)
-                await asyncio.sleep(0.5)
-            except Exception as exc:
-                logger.error("Shahar ball jadvali xatosi: %s", exc)
+        await send_ball_image("city", "SHAHAR AGENTLARI")
 
     sent += await send_section(
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏘️ <b>VILOYAT AGENTLARI</b>\n📅 {today_str}\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
         region_agents,
     )
-    # Viloyat agentlari ball jadvali
     if region_agents:
-        ball_text = reports.daily_ball_report("region")
-        if ball_text:
-            try:
-                await app.bot.send_message(chat_id, ball_text, parse_mode=ParseMode.HTML)
-                await asyncio.sleep(0.5)
-            except Exception as exc:
-                logger.error("Viloyat ball jadvali xatosi: %s", exc)
+        await send_ball_image("region", "VILOYAT AGENTLARI")
 
     if other_agents:
         sent += await send_section(
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n❓ <b>BOSHQA AGENTLAR</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
             other_agents,
         )
-    logger.info("✓ Guruhga %d ta agent kartochkasi + 2 ta ball jadvali yuborildi", sent)
+    logger.info("Guruhga %d ta agent kartochkasi (PNG) + 2 ta ball jadvali (PNG) yuborildi", sent)
     return sent
 
 
