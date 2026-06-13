@@ -348,49 +348,49 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
         return None
 
     # O'lcham va layout
-    W = 1480
+    W = 1600
     # Ustun kengliklari
-    C1 = 320   # Label
-    C2 = 340   # Qiymat (so'm)
-    C3 = 100   # foiz
-    C4 = 540   # Izoh
-    C5_LBL = 110  # Ish kuni label
+    C1 = 340   # Label
+    C2 = 360   # Qiymat (so'm)
+    C3 = 110   # foiz
+    C4 = 600   # Izoh
+    C5_LBL = 120  # Ish kuni label
     C5_VAL = 70   # Ish kuni qiymat
     assert C1 + C2 + C3 + C4 + C5_LBL + C5_VAL == W
 
-    # Row balandliklari
-    H_HEADER = 56
-    H_PLAN = 56
-    H_BAJARDI = 150
-    H_QOLDIQ = 56
-    H_PROGNOZ = 150
-    H_KUNLIK_KER = 56
-    H_KUNLIK_BAJ = 150
+    # Row balandliklari (katta matn + ko'proq joy)
+    H_HEADER = 64
+    H_PLAN = 64
+    H_BAJARDI = 200
+    H_QOLDIQ = 64
+    H_PROGNOZ = 200
+    H_KUNLIK_KER = 64
+    H_KUNLIK_BAJ = 200
 
     main_height = (H_HEADER + H_PLAN + H_BAJARDI + H_QOLDIQ +
                    H_PROGNOZ + H_KUNLIK_KER + H_KUNLIK_BAJ)
 
     # Pastida vizit jadvali + sana
-    GAP = 28
-    H_VISIT_ROW = 48
+    GAP = 36
+    H_VISIT_ROW = 58
     visit_rows = 5
     H_VISIT = H_VISIT_ROW * visit_rows
-    H_SANA = 40
-    H = main_height + GAP + H_VISIT + H_SANA + 20
+    H_SANA = 44
+    H = main_height + GAP + H_VISIT + H_SANA + 24
 
     img = Image.new("RGB", (W, H), BG_CREAM)
     draw = ImageDraw.Draw(img)
 
-    # ----- Fontlar (hammasi BOLD — jirniy) -----
-    f_h_lbl = _font(24, bold=True)         # Header label (AGENT, IYUN OYI)
-    f_h_val = _font(24, bold=True)         # Agent nomi
-    f_lbl = _font(22, bold=True)           # row labels (chap ustun)
-    f_money = _font(27, bold=True)         # asosiy summalar
-    f_money_small = _font(24, bold=True)
-    f_pct = _font(32, bold=True)
-    f_note = _font(21, bold=True)          # Izoh matni — endi QALIN
-    f_kun_lbl = _font(19, bold=True)
-    f_kun_val = _font(24, bold=True)
+    # ----- Fontlar (hammasi BOLD — jirniy, ~2x katta) -----
+    f_h_lbl = _font(30, bold=True)         # Header label (AGENT, IYUN OYI)
+    f_h_val = _font(30, bold=True)         # Agent nomi
+    f_lbl = _font(28, bold=True)           # row labels (chap ustun)
+    f_money = _font(38, bold=True)         # asosiy summalar
+    f_money_small = _font(31, bold=True)
+    f_pct = _font(46, bold=True)
+    f_note = _font(28, bold=True)          # Izoh matni — QALIN
+    f_kun_lbl = _font(23, bold=True)
+    f_kun_val = _font(34, bold=True)
 
     # ============================================================
     # ROW 0 — Header (AGENT | nomi | (empty) | IYUN OYI)
@@ -405,7 +405,7 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     span_w = C2 + C3
     _draw_cell(draw, x, y, span_w, H_HEADER, bg=BG_CREAM)
     _draw_centered_text(draw, m["name"], x, y, span_w, H_HEADER,
-                        _font(20, bold=True), GREEN_HEADER_LIGHT)
+                        f_h_val, GREEN_HEADER_LIGHT)
     x += span_w
     # ustun 3 (izoh ustuni boshi — bo'sh)
     _draw_cell(draw, x, y, C4, H_HEADER, bg=BG_CREAM)
@@ -462,7 +462,7 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     note_h = H_BAJARDI + H_QOLDIQ
     _draw_cell(draw, x, y, C4, note_h, bg=LIGHT_ROW)
     _draw_wrapped(draw, _bajardi_text(m["plan_pct"], m["remaining_wd"]),
-                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=4)
+                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=12)
     x += C4
     # ISHLAB BO'LINDI label
     _draw_cell(draw, x, y, C5_LBL, H_BAJARDI, bg=BG_CREAM)
@@ -482,7 +482,7 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     x = 0
     _draw_cell(draw, x, y, C1, H_QOLDIQ, bg=LIGHT_ROW)
     _draw_centered_text(draw, "PLAN QOLDIQ (BAJARISH KERAK):",
-                        x, y, C1, H_QOLDIQ, _font(15, bold=True), TEXT_DARK)
+                        x, y, C1, H_QOLDIQ, _font(20, bold=True), TEXT_DARK)
     x += C1
     _draw_cell(draw, x, y, C2, H_QOLDIQ, bg=LIGHT_ROW)
     _draw_centered_text(draw, _fmt_money(m["plan_remaining"]),
@@ -497,9 +497,9 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     _draw_cell(draw, x, y, C5_LBL, H_QOLDIQ, bg=BG_CREAM)
     # 2 satrli: "ISH KUNI" / "QOLDI"
     _draw_centered_text(draw, "ISH KUNI", x, y, C5_LBL, H_QOLDIQ // 2,
-                        _font(13, bold=True), TEXT_DARK)
+                        _font(18, bold=True), TEXT_DARK)
     _draw_centered_text(draw, "QOLDI", x, y + H_QOLDIQ // 2, C5_LBL, H_QOLDIQ // 2,
-                        _font(13, bold=True), TEXT_DARK)
+                        _font(18, bold=True), TEXT_DARK)
     x += C5_LBL
     _draw_cell(draw, x, y, C5_VAL, H_QOLDIQ, bg=BG_CREAM)
     _draw_centered_text(draw, str(m["remaining_wd"]),
@@ -526,7 +526,7 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     note_h_b = H_PROGNOZ + H_KUNLIK_KER
     _draw_cell(draw, x, y, C4, note_h_b, bg=LIGHT_ROW)
     _draw_wrapped(draw, _prognoz_text(m["prognoz_pct"]),
-                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=4)
+                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=12)
     x += C4
     # O'ng tomonda (C5) — bo'sh hujayralar qo'shamiz, vertical span
     _draw_cell(draw, x, y, C5_LBL + C5_VAL, note_h_b, bg=BG_CREAM)
@@ -538,7 +538,7 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     x = 0
     _draw_cell(draw, x, y, C1, H_KUNLIK_KER, bg=LIGHT_ROW)
     _draw_centered_text(draw, "KUNLIK BAJARISH KEREAK:",
-                        x, y, C1, H_KUNLIK_KER, _font(15, bold=True), TEXT_DARK)
+                        x, y, C1, H_KUNLIK_KER, _font(20, bold=True), TEXT_DARK)
     x += C1
     _draw_cell(draw, x, y, C2, H_KUNLIK_KER, bg=LIGHT_ROW)
     _draw_centered_text(draw, _fmt_money(m["daily_required"]),
@@ -574,7 +574,7 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     x += C3
     _draw_cell(draw, x, y, C4, H_KUNLIK_BAJ, bg=LIGHT_ROW)
     _draw_wrapped(draw, _kunlik_text(m["daily_pct"], m["remaining_wd"]),
-                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=4)
+                  x + 12, y + 10, C4 - 24, f_note, fill=TEXT_DARK, line_spacing=12)
     x += C4
     _draw_cell(draw, x, y, C5_LBL + C5_VAL, H_KUNLIK_BAJ, bg=BG_CREAM)
     y += H_KUNLIK_BAJ
@@ -584,11 +584,11 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     # ============================================================
     y += GAP
     v_x = 0
-    v_w_lbl = 360
-    v_w_val = 240
+    v_w_lbl = 440
+    v_w_val = 260
     v_total = v_w_lbl + v_w_val
-    f_v_lbl = _font(20, bold=True)
-    f_v_val = _font(22, bold=True)
+    f_v_lbl = _font(24, bold=True)
+    f_v_val = _font(30, bold=True)
 
     visit_rows_data = [
         ("VIZIT PLAN:", str(m["visit_plan"]), GREEN_HEADER, WHITE),
@@ -612,8 +612,8 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     # SANA — pastda o'ng tomon
     sana_y = y - H_VISIT_ROW  # pastki vizit qator bilan bir tekisda
     sana_text = f"SANA: {m['today'].strftime('%d.%m.%Y')}"
-    f_sana = _font(22, bold=True)
-    draw.text((760, sana_y + 10), sana_text, font=f_sana, fill=TEXT_DARK)
+    f_sana = _font(28, bold=True)
+    draw.text((820, sana_y + 12), sana_text, font=f_sana, fill=TEXT_DARK)
 
     # PNG bytes ga aylantirib qaytarish
     buf = BytesIO()
@@ -681,27 +681,27 @@ def render_ball_table(category: str) -> Optional[bytes]:
         return None
 
     # O'lcham va layout
-    W = 1240
-    C_ORIN = 95
-    C_AGENT = 565
-    C_SAVDO = 270
-    C_RANG = 135
-    C_BALL = 175
+    W = 1560
+    C_ORIN = 120
+    C_AGENT = 710
+    C_SAVDO = 340
+    C_RANG = 170
+    C_BALL = 220
     assert C_ORIN + C_AGENT + C_SAVDO + C_RANG + C_BALL == W
 
-    H_HEADER = 76
-    H_ROW = 68
-    H_TITLE = 92
-    H = H_TITLE + H_HEADER + H_ROW * len(items) + 24
+    H_HEADER = 92
+    H_ROW = 86
+    H_TITLE = 110
+    H = H_TITLE + H_HEADER + H_ROW * len(items) + 28
 
     img = Image.new("RGB", (W, H), BG_CREAM)
     draw = ImageDraw.Draw(img)
 
-    f_title = _font(30, bold=True)
-    f_h = _font(26, bold=True)
-    f_row = _font(26, bold=True)
-    f_orin = _font(26, bold=True)
-    f_ball = _font(28, bold=True)
+    f_title = _font(38, bold=True)
+    f_h = _font(32, bold=True)
+    f_row = _font(32, bold=True)
+    f_orin = _font(34, bold=True)
+    f_ball = _font(36, bold=True)
 
     # Sarlavha
     cat_label = "SHAHAR AGENTLARI" if category == "city" else "VILOYAT AGENTLARI"
@@ -743,7 +743,7 @@ def render_ball_table(category: str) -> Optional[bytes]:
         x += C_SAVDO
         # Rang (aylana)
         _draw_cell(draw, x, y, C_RANG, H_ROW, bg=bg)
-        _draw_color_circle(draw, x + C_RANG // 2, y + H_ROW // 2, 20, it["color"])
+        _draw_color_circle(draw, x + C_RANG // 2, y + H_ROW // 2, 26, it["color"])
         x += C_RANG
         # Ball
         _draw_cell(draw, x, y, C_BALL, H_ROW, bg=bg)
@@ -767,5 +767,5 @@ def _draw_color_circle(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, colo
     draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=c, outline=(60, 60, 60), width=2)
     # Yashil aylana ichida ✓ belgi
     if color == "green":
-        draw.line([(cx - 8, cy + 2), (cx - 2, cy + 8)], fill=WHITE, width=4)
-        draw.line([(cx - 2, cy + 8), (cx + 9, cy - 7)], fill=WHITE, width=4)
+        draw.line([(cx - 11, cy + 2), (cx - 3, cy + 11)], fill=WHITE, width=5)
+        draw.line([(cx - 3, cy + 11), (cx + 12, cy - 9)], fill=WHITE, width=5)
