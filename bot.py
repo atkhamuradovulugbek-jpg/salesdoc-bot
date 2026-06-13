@@ -8,6 +8,7 @@ from datetime import date, timedelta
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
+from telegram.error import NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
@@ -470,18 +471,18 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 # Shahar
                 city_png = image_reports.render_ball_table("city")
                 if city_png:
-                    await context.application.bot.send_document(
-                        chat_id, document=city_png, filename=f"ball_shahar_{today_str}.png",
+                    await context.application.bot.send_photo(
+                        chat_id, photo=city_png,
                         caption=f"🔥 <b>BUGUNGI BALL JADVALI</b>  ·  SHAHAR AGENTLARI  ·  📅 {today_str}",
                         parse_mode=ParseMode.HTML,
                     )
                     sent_count += 1
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(1.0)
                 # Viloyat
                 region_png = image_reports.render_ball_table("region")
                 if region_png:
-                    await context.application.bot.send_document(
-                        chat_id, document=region_png, filename=f"ball_viloyat_{today_str}.png",
+                    await context.application.bot.send_photo(
+                        chat_id, photo=region_png,
                         caption=f"🔥 <b>BUGUNGI BALL JADVALI</b>  ·  VILOYAT AGENTLARI  ·  📅 {today_str}",
                         parse_mode=ParseMode.HTML,
                     )
@@ -831,6 +832,26 @@ async def send_daily_digest(app: Application) -> None:
             logger.error("Digest yuborishda xato (user %s): %s", admin_id, exc)
 
 
+async def _send_with_retry(coro_factory, what: str, max_attempts: int = 6):
+    """Telegram 'Flood control' va vaqtinchalik tarmoq xatolarini
+    avtomatik kutib qayta yuboradi. coro_factory — har urinishda YANGI
+    coroutine qaytaruvchi funksiya (lambda)."""
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return await coro_factory()
+        except RetryAfter as exc:
+            wait = float(getattr(exc, "retry_after", 5)) + 1
+            logger.warning("Flood control (%s): %.0f s kutilmoqda (urinish %d/%d)",
+                           what, wait, attempt, max_attempts)
+            await asyncio.sleep(wait)
+        except (TimedOut, NetworkError) as exc:
+            logger.warning("Tarmoq xatosi (%s): %s — qayta urinish %d/%d",
+                           what, exc, attempt, max_attempts)
+            await asyncio.sleep(3)
+    logger.error("%s yuborilmadi (%d urinishdan keyin ham bo'lmadi)", what, max_attempts)
+    return None
+
+
 async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> int:
     """Har faol agent uchun hisobot kartochkasini RASM ko'rinishida guruhga yuboradi.
     Shahar agentlari va viloyat agentlari alohida guruhlanadi.
@@ -867,11 +888,11 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
         """Bo'lim sarlavhasi + har agent uchun PNG kartochka (caption bilan)."""
         if not group:
             return 0
-        try:
-            await app.bot.send_message(chat_id, header, parse_mode=ParseMode.HTML)
-            await asyncio.sleep(0.4)
-        except Exception as exc:
-            logger.error("Section header yuborishda xato: %s", exc)
+        await _send_with_retry(
+            lambda: app.bot.send_message(chat_id, header, parse_mode=ParseMode.HTML),
+            "section header",
+        )
+        await asyncio.sleep(1.0)
         cnt = 0
         total = len(group)
         for i, a in enumerate(group, 1):
@@ -881,18 +902,26 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
                     if not png:
                         continue
                     caption = f"👤 <b>{a['name']}</b>  ·  📅 {today_str}  ·  ({i}/{total})"
-                    await app.bot.send_document(
-                        chat_id, document=png, filename=f"agent_{a['sd_id']}_{today_str}.png",
-                        caption=caption, parse_mode=ParseMode.HTML
+                    res = await _send_with_retry(
+                        lambda: app.bot.send_photo(
+                            chat_id, photo=png, caption=caption,
+                            parse_mode=ParseMode.HTML,
+                        ),
+                        f"kartochka ({a['name']})",
                     )
+                    if res is None:
+                        continue
                 else:
                     # Pillow yo'q bo'lsa — eski matn formatda yuborish
                     text = reports.agent_report_card(a["sd_id"], index=i, total=total)
                     if not text:
                         continue
-                    await app.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML)
+                    await _send_with_retry(
+                        lambda: app.bot.send_message(chat_id, text, parse_mode=ParseMode.HTML),
+                        f"kartochka matn ({a['name']})",
+                    )
                 cnt += 1
-                await asyncio.sleep(0.6)
+                await asyncio.sleep(1.2)
             except Exception as exc:
                 logger.error("Kartochka yuborishda xato (%s): %s", a["name"], exc)
         return cnt
@@ -905,16 +934,22 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
                     logger.info("Ball jadvali (%s) — ma'lumot yo'q", category)
                     return
                 caption = f"🔥 <b>BUGUNGI BALL JADVALI</b>  ·  {label}  ·  📅 {today_str}"
-                await app.bot.send_document(
-                    chat_id, document=png, filename=f"ball_{category}_{today_str}.png",
-                    caption=caption, parse_mode=ParseMode.HTML
+                await _send_with_retry(
+                    lambda: app.bot.send_photo(
+                        chat_id, photo=png, caption=caption,
+                        parse_mode=ParseMode.HTML,
+                    ),
+                    f"ball jadvali ({category})",
                 )
             else:
                 # Eski matn formatda
                 ball_text = reports.daily_ball_report(category)
                 if ball_text:
-                    await app.bot.send_message(chat_id, ball_text, parse_mode=ParseMode.HTML)
-            await asyncio.sleep(0.6)
+                    await _send_with_retry(
+                        lambda: app.bot.send_message(chat_id, ball_text, parse_mode=ParseMode.HTML),
+                        f"ball matn ({category})",
+                    )
+            await asyncio.sleep(1.2)
         except Exception as exc:
             logger.error("Ball jadvali (%s) xatosi: %s", category, exc)
 
