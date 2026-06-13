@@ -68,6 +68,12 @@ _FONT_CANDIDATES_BOLD = [
 ]
 
 
+import logging as _logging
+
+_logger = _logging.getLogger(__name__)
+_FONT_WARNED = False
+
+
 def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
     paths = _FONT_CANDIDATES_BOLD if bold else _FONT_CANDIDATES_REGULAR
     for p in paths:
@@ -76,7 +82,19 @@ def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
                 return ImageFont.truetype(p, size)
             except Exception:
                 continue
-    return ImageFont.load_default()
+    # Hech qaysi TTF topilmadi — bu Railway'da shrift o'rnatilmaganini bildiradi.
+    global _FONT_WARNED
+    if not _FONT_WARNED:
+        _logger.error(
+            "TTF SHRIFT TOPILMADI! Rasm matni mitti chiqadi. "
+            "Dockerfile'da 'fonts-dejavu-core' o'rnatilganini tekshiring."
+        )
+        _FONT_WARNED = True
+    # O'lchamga bo'ysunadigan zaxira (Pillow 10+ load_default(size) ni qo'llab-quvvatlaydi)
+    try:
+        return ImageFont.load_default(size)
+    except TypeError:
+        return ImageFont.load_default()
 
 
 # ------------------------------------------------------------------
