@@ -658,12 +658,24 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
 # ------------------------------------------------------------------
 
 def _ball_for_pct(pct: float) -> tuple[str, int, tuple[int, int, int]]:
-    """Pct ga qarab: (rang nomi, ball, fon rangi)."""
+    """Kunlik savdo plani foiziga qarab: (marker turi, ball, fon rangi).
+
+    Qoidalar:
+      >= 150%      -> SUPER KUN     -> 4 ball (alanga)
+      100-149%     -> ULTRA YASHIL  -> 3 ball (yashil + ✓)
+      90-99%       -> YASHIL        -> 2 ball (yashil aylana)
+      80-89%       -> SARIQ         -> 1 ball (sariq aylana)
+      0-79%        -> QIZIL         -> 0 ball (qizil aylana)
+    """
+    if pct >= 150:
+        return ("super", 4, (250, 190, 140))   # to'q sariq fon (alanga)
     if pct >= 100:
-        return ("green", 3, (200, 240, 200))   # och yashil
+        return ("ultra", 3, (190, 235, 190))   # yashil fon + ✓
+    if pct >= 90:
+        return ("green", 2, (215, 245, 210))   # och yashil fon
     if pct >= 80:
-        return ("yellow", 2, (255, 250, 200))  # och sariq
-    return ("red", 0, (255, 210, 210))         # och qizil
+        return ("yellow", 1, (255, 245, 190))  # sariq fon
+    return ("red", 0, (255, 205, 205))         # qizil fon
 
 
 def _compute_ball_items(category: str) -> list[dict] | None:
@@ -788,16 +800,41 @@ def render_ball_table(category: str) -> Optional[bytes]:
     return buf.getvalue()
 
 
-def _draw_color_circle(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, color: str):
-    """Yashil/Sariq/Qizil aylana chizadi."""
+def _draw_flame(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int):
+    """SUPER KUN uchun alanga (olov) belgisi — to'q sariq + sariq."""
+    outer = [
+        (cx, cy - r),
+        (cx + int(r * 0.85), cy + int(r * 0.25)),
+        (cx + int(r * 0.45), cy + r),
+        (cx - int(r * 0.45), cy + r),
+        (cx - int(r * 0.85), cy + int(r * 0.25)),
+    ]
+    draw.polygon(outer, fill=(255, 120, 30), outline=(190, 70, 10))
+    inner = [
+        (cx, cy - int(r * 0.45)),
+        (cx + int(r * 0.45), cy + int(r * 0.30)),
+        (cx, cy + int(r * 0.75)),
+        (cx - int(r * 0.45), cy + int(r * 0.30)),
+    ]
+    draw.polygon(inner, fill=(255, 215, 70))
+
+
+def _draw_color_circle(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, marker: str):
+    """Ball markerini chizadi:
+    super -> alanga, ultra -> yashil aylana + ✓, green -> yashil aylana,
+    yellow -> sariq aylana, red -> qizil aylana."""
+    if marker == "super":
+        _draw_flame(draw, cx, cy, r)
+        return
     colors = {
-        "green": (40, 170, 70),
+        "ultra": (40, 170, 70),
+        "green": (90, 200, 110),
         "yellow": (240, 200, 60),
         "red": (220, 50, 60),
     }
-    c = colors.get(color, (150, 150, 150))
+    c = colors.get(marker, (150, 150, 150))
     draw.ellipse([cx - r, cy - r, cx + r, cy + r], fill=c, outline=(60, 60, 60), width=2)
-    # Yashil aylana ichida ✓ belgi
-    if color == "green":
+    # ULTRA YASHIL aylana ichida ✓ belgi
+    if marker == "ultra":
         draw.line([(cx - 11, cy + 2), (cx - 3, cy + 11)], fill=WHITE, width=5)
         draw.line([(cx - 3, cy + 11), (cx + 12, cy - 9)], fill=WHITE, width=5)
