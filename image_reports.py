@@ -176,6 +176,20 @@ def _draw_centered_text(draw, text, x, y, w, h, font, fill):
     draw.text((tx, ty), text, font=font, fill=fill)
 
 
+def _draw_centered_fit(draw, text, x, y, w, h, size, fill, bold=True,
+                       min_size: int = 16, pad: int = 16):
+    """Matnni katakka markazlab chizadi. Agar sig'masa — shriftni
+    avtomatik kichraytiradi (hech qachon katak chetidan oshib ketmaydi)."""
+    s = size
+    font = _font(s, bold=bold)
+    tw = font.getbbox(text)[2] - font.getbbox(text)[0]
+    while tw > (w - pad) and s > min_size:
+        s -= 1
+        font = _font(s, bold=bold)
+        tw = font.getbbox(text)[2] - font.getbbox(text)[0]
+    _draw_centered_text(draw, text, x, y, w, h, font, fill)
+
+
 def _draw_cell(draw, x, y, w, h, bg=None, border=BORDER_GRAY, border_w: int = 2):
     if bg is not None:
         draw.rectangle([x, y, x + w, y + h], fill=bg)
@@ -366,15 +380,15 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
         return None
 
     # O'lcham va layout
-    W = 1600
-    # Ustun kengliklari
-    C1 = 340   # Label
-    C2 = 360   # Qiymat (so'm)
-    C3 = 110   # foiz
-    C4 = 600   # Izoh
-    C5_LBL = 120  # Ish kuni label
-    C5_VAL = 70   # Ish kuni qiymat
-    assert C1 + C2 + C3 + C4 + C5_LBL + C5_VAL == W
+    # Ustun kengliklari — summa va % bir-biriga qo'shilib ketmasligi uchun
+    # kengaytirildi (C2 va C3 ancha keng).
+    C1 = 360   # Label
+    C2 = 480   # Qiymat (so'm) — keng, summalar sig'sin
+    C3 = 180   # foiz — keng, % sig'sin
+    C4 = 620   # Izoh
+    C5_LBL = 130  # Ish kuni label
+    C5_VAL = 80   # Ish kuni qiymat
+    W = C1 + C2 + C3 + C4 + C5_LBL + C5_VAL
 
     # Row balandliklari (katta matn + ko'proq joy)
     H_HEADER = 64
@@ -443,8 +457,8 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     _draw_centered_text(draw, "OYLIK PLAN:", x, y, C1, H_PLAN, f_lbl, WHITE)
     x += C1
     _draw_cell(draw, x, y, C2, H_PLAN, bg=GREEN_HEADER)
-    _draw_centered_text(draw, _fmt_money(m["sales_plan"]),
-                        x, y, C2, H_PLAN, f_money, WHITE)
+    _draw_centered_fit(draw, _fmt_money(m["sales_plan"]),
+                       x, y, C2, H_PLAN, 38, WHITE)
     x += C2
     _draw_cell(draw, x, y, C3, H_PLAN, bg=GREEN_HEADER)
     _draw_centered_text(draw, "%", x, y, C3, H_PLAN, f_lbl, WHITE)
@@ -469,12 +483,12 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     _draw_centered_text(draw, "PLAN BAJARDI:", x, y, C1, H_BAJARDI, f_lbl, TEXT_DARK)
     x += C1
     _draw_cell(draw, x, y, C2, H_BAJARDI, bg=bajardi_bg)
-    _draw_centered_text(draw, _fmt_money(m["sales_done"]),
-                        x, y, C2, H_BAJARDI, f_money, bajardi_text_color)
+    _draw_centered_fit(draw, _fmt_money(m["sales_done"]),
+                       x, y, C2, H_BAJARDI, 38, bajardi_text_color)
     x += C2
     _draw_cell(draw, x, y, C3, H_BAJARDI, bg=bajardi_bg)
-    _draw_centered_text(draw, f"{m['plan_pct']:.0f}%",
-                        x, y, C3, H_BAJARDI, f_pct, bajardi_text_color)
+    _draw_centered_fit(draw, f"{m['plan_pct']:.0f}%",
+                       x, y, C3, H_BAJARDI, 46, bajardi_text_color)
     x += C3
     # Izoh ustuni — PLAN BAJARDI + PLAN QOLDIQ ikkisini qamrab oladi
     note_h = H_BAJARDI + H_QOLDIQ
@@ -499,12 +513,12 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     # ============================================================
     x = 0
     _draw_cell(draw, x, y, C1, H_QOLDIQ, bg=LIGHT_ROW)
-    _draw_centered_text(draw, "PLAN QOLDIQ (BAJARISH KERAK):",
-                        x, y, C1, H_QOLDIQ, _font(20, bold=True), TEXT_DARK)
+    _draw_centered_fit(draw, "PLAN QOLDIQ (BAJARISH KERAK):",
+                       x, y, C1, H_QOLDIQ, 24, TEXT_DARK)
     x += C1
     _draw_cell(draw, x, y, C2, H_QOLDIQ, bg=LIGHT_ROW)
-    _draw_centered_text(draw, _fmt_money(m["plan_remaining"]),
-                        x, y, C2, H_QOLDIQ, f_money_small, TEXT_DARK)
+    _draw_centered_fit(draw, _fmt_money(m["plan_remaining"]),
+                       x, y, C2, H_QOLDIQ, 34, TEXT_DARK)
     x += C2
     _draw_cell(draw, x, y, C3, H_QOLDIQ, bg=LIGHT_ROW)
     x += C3
@@ -533,12 +547,12 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     _draw_centered_text(draw, "PLAN PROGNOZ:", x, y, C1, H_PROGNOZ, f_lbl, TEXT_DARK)
     x += C1
     _draw_cell(draw, x, y, C2, H_PROGNOZ, bg=prognoz_bg)
-    _draw_centered_text(draw, _fmt_money(m["prognoz"]),
-                        x, y, C2, H_PROGNOZ, f_money, WHITE)
+    _draw_centered_fit(draw, _fmt_money(m["prognoz"]),
+                       x, y, C2, H_PROGNOZ, 38, WHITE)
     x += C2
     _draw_cell(draw, x, y, C3, H_PROGNOZ, bg=prognoz_bg)
-    _draw_centered_text(draw, f"{m['prognoz_pct']:.0f}%",
-                        x, y, C3, H_PROGNOZ, f_pct, WHITE)
+    _draw_centered_fit(draw, f"{m['prognoz_pct']:.0f}%",
+                       x, y, C3, H_PROGNOZ, 46, WHITE)
     x += C3
     # Note B — PROGNOZ + KUNLIK_KER merge
     note_h_b = H_PROGNOZ + H_KUNLIK_KER
@@ -555,12 +569,12 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     # ============================================================
     x = 0
     _draw_cell(draw, x, y, C1, H_KUNLIK_KER, bg=LIGHT_ROW)
-    _draw_centered_text(draw, "KUNLIK BAJARISH KEREAK:",
-                        x, y, C1, H_KUNLIK_KER, _font(20, bold=True), TEXT_DARK)
+    _draw_centered_fit(draw, "KUNLIK BAJARISH KEREAK:",
+                       x, y, C1, H_KUNLIK_KER, 24, TEXT_DARK)
     x += C1
     _draw_cell(draw, x, y, C2, H_KUNLIK_KER, bg=LIGHT_ROW)
-    _draw_centered_text(draw, _fmt_money(m["daily_required"]),
-                        x, y, C2, H_KUNLIK_KER, f_money_small, TEXT_DARK)
+    _draw_centered_fit(draw, _fmt_money(m["daily_required"]),
+                       x, y, C2, H_KUNLIK_KER, 34, TEXT_DARK)
     x += C2
     _draw_cell(draw, x, y, C3, H_KUNLIK_KER, bg=LIGHT_ROW)
     x += C3
@@ -581,14 +595,14 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
                         x, y, C1, H_KUNLIK_BAJ, f_lbl, TEXT_DARK)
     x += C1
     _draw_cell(draw, x, y, C2, H_KUNLIK_BAJ, bg=kunlik_bg)
-    _draw_centered_text(draw, _fmt_money(m["today_sales"]),
-                        x, y, C2, H_KUNLIK_BAJ, f_money,
-                        WHITE if kunlik_bg != LIGHT_ROW else TEXT_DARK)
+    _draw_centered_fit(draw, _fmt_money(m["today_sales"]),
+                       x, y, C2, H_KUNLIK_BAJ, 38,
+                       WHITE if kunlik_bg != LIGHT_ROW else TEXT_DARK)
     x += C2
     _draw_cell(draw, x, y, C3, H_KUNLIK_BAJ, bg=kunlik_bg)
     pct_txt = f"{m['daily_pct']:.0f}%" if m["daily_required"] > 0 else "—"
-    _draw_centered_text(draw, pct_txt, x, y, C3, H_KUNLIK_BAJ, f_pct,
-                        WHITE if kunlik_bg != LIGHT_ROW else TEXT_DARK)
+    _draw_centered_fit(draw, pct_txt, x, y, C3, H_KUNLIK_BAJ, 46,
+                       WHITE if kunlik_bg != LIGHT_ROW else TEXT_DARK)
     x += C3
     _draw_cell(draw, x, y, C4, H_KUNLIK_BAJ, bg=LIGHT_ROW)
     _draw_wrapped(draw, _kunlik_text(m["daily_pct"], m["remaining_wd"]),
