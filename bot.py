@@ -470,8 +470,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 # Shahar
                 city_png = image_reports.render_ball_table("city")
                 if city_png:
-                    await context.application.bot.send_photo(
-                        chat_id, photo=city_png,
+                    await context.application.bot.send_document(
+                        chat_id, document=city_png, filename=f"ball_shahar_{today_str}.png",
                         caption=f"🔥 <b>BUGUNGI BALL JADVALI</b>  ·  SHAHAR AGENTLARI  ·  📅 {today_str}",
                         parse_mode=ParseMode.HTML,
                     )
@@ -480,8 +480,8 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 # Viloyat
                 region_png = image_reports.render_ball_table("region")
                 if region_png:
-                    await context.application.bot.send_photo(
-                        chat_id, photo=region_png,
+                    await context.application.bot.send_document(
+                        chat_id, document=region_png, filename=f"ball_viloyat_{today_str}.png",
                         caption=f"🔥 <b>BUGUNGI BALL JADVALI</b>  ·  VILOYAT AGENTLARI  ·  📅 {today_str}",
                         parse_mode=ParseMode.HTML,
                     )
@@ -881,8 +881,9 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
                     if not png:
                         continue
                     caption = f"👤 <b>{a['name']}</b>  ·  📅 {today_str}  ·  ({i}/{total})"
-                    await app.bot.send_photo(
-                        chat_id, photo=png, caption=caption, parse_mode=ParseMode.HTML
+                    await app.bot.send_document(
+                        chat_id, document=png, filename=f"agent_{a['sd_id']}_{today_str}.png",
+                        caption=caption, parse_mode=ParseMode.HTML
                     )
                 else:
                     # Pillow yo'q bo'lsa — eski matn formatda yuborish
@@ -904,8 +905,9 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
                     logger.info("Ball jadvali (%s) — ma'lumot yo'q", category)
                     return
                 caption = f"🔥 <b>BUGUNGI BALL JADVALI</b>  ·  {label}  ·  📅 {today_str}"
-                await app.bot.send_photo(
-                    chat_id, photo=png, caption=caption, parse_mode=ParseMode.HTML
+                await app.bot.send_document(
+                    chat_id, document=png, filename=f"ball_{category}_{today_str}.png",
+                    caption=caption, parse_mode=ParseMode.HTML
                 )
             else:
                 # Eski matn formatda

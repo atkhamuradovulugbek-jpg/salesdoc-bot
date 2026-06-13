@@ -348,31 +348,31 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
         return None
 
     # O'lcham va layout
-    W = 1280
+    W = 1480
     # Ustun kengliklari
-    C1 = 280   # Label
-    C2 = 310   # Qiymat (so'm)
-    C3 = 90    # foiz
-    C4 = 440   # Izoh
-    C5_LBL = 100  # Ish kuni label
-    C5_VAL = 60   # Ish kuni qiymat
+    C1 = 320   # Label
+    C2 = 340   # Qiymat (so'm)
+    C3 = 100   # foiz
+    C4 = 540   # Izoh
+    C5_LBL = 110  # Ish kuni label
+    C5_VAL = 70   # Ish kuni qiymat
     assert C1 + C2 + C3 + C4 + C5_LBL + C5_VAL == W
 
     # Row balandliklari
-    H_HEADER = 50
-    H_PLAN = 50
-    H_BAJARDI = 130
-    H_QOLDIQ = 50
-    H_PROGNOZ = 130
-    H_KUNLIK_KER = 50
-    H_KUNLIK_BAJ = 130
+    H_HEADER = 56
+    H_PLAN = 56
+    H_BAJARDI = 150
+    H_QOLDIQ = 56
+    H_PROGNOZ = 150
+    H_KUNLIK_KER = 56
+    H_KUNLIK_BAJ = 150
 
     main_height = (H_HEADER + H_PLAN + H_BAJARDI + H_QOLDIQ +
                    H_PROGNOZ + H_KUNLIK_KER + H_KUNLIK_BAJ)
 
     # Pastida vizit jadvali + sana
-    GAP = 24
-    H_VISIT_ROW = 40
+    GAP = 28
+    H_VISIT_ROW = 48
     visit_rows = 5
     H_VISIT = H_VISIT_ROW * visit_rows
     H_SANA = 40
@@ -381,16 +381,16 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     img = Image.new("RGB", (W, H), BG_CREAM)
     draw = ImageDraw.Draw(img)
 
-    # ----- Fontlar -----
-    f_h_lbl = _font(22, bold=True)         # Header label (AGENT, IYUN OYI)
-    f_h_val = _font(22, bold=True)         # Agent nomi
-    f_lbl = _font(20, bold=True)           # row labels (chap ustun)
-    f_money = _font(24, bold=True)         # asosiy summalar
-    f_money_small = _font(22, bold=True)
-    f_pct = _font(28, bold=True)
-    f_note = _font(18)                     # Izoh matni
-    f_kun_lbl = _font(17, bold=True)
-    f_kun_val = _font(22, bold=True)
+    # ----- Fontlar (hammasi BOLD — jirniy) -----
+    f_h_lbl = _font(24, bold=True)         # Header label (AGENT, IYUN OYI)
+    f_h_val = _font(24, bold=True)         # Agent nomi
+    f_lbl = _font(22, bold=True)           # row labels (chap ustun)
+    f_money = _font(27, bold=True)         # asosiy summalar
+    f_money_small = _font(24, bold=True)
+    f_pct = _font(32, bold=True)
+    f_note = _font(21, bold=True)          # Izoh matni — endi QALIN
+    f_kun_lbl = _font(19, bold=True)
+    f_kun_val = _font(24, bold=True)
 
     # ============================================================
     # ROW 0 — Header (AGENT | nomi | (empty) | IYUN OYI)
@@ -584,11 +584,11 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     # ============================================================
     y += GAP
     v_x = 0
-    v_w_lbl = 280
-    v_w_val = 220
+    v_w_lbl = 360
+    v_w_val = 240
     v_total = v_w_lbl + v_w_val
-    f_v_lbl = _font(17, bold=True)
-    f_v_val = _font(18, bold=True)
+    f_v_lbl = _font(20, bold=True)
+    f_v_val = _font(22, bold=True)
 
     visit_rows_data = [
         ("VIZIT PLAN:", str(m["visit_plan"]), GREEN_HEADER, WHITE),
@@ -612,8 +612,8 @@ def render_agent_card(agent_sd_id: str) -> Optional[bytes]:
     # SANA — pastda o'ng tomon
     sana_y = y - H_VISIT_ROW  # pastki vizit qator bilan bir tekisda
     sana_text = f"SANA: {m['today'].strftime('%d.%m.%Y')}"
-    f_sana = _font(18, bold=True)
-    draw.text((700, sana_y + 8), sana_text, font=f_sana, fill=TEXT_DARK)
+    f_sana = _font(22, bold=True)
+    draw.text((760, sana_y + 10), sana_text, font=f_sana, fill=TEXT_DARK)
 
     # PNG bytes ga aylantirib qaytarish
     buf = BytesIO()
