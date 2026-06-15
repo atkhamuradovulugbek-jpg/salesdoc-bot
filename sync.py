@@ -216,6 +216,7 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
         order_rows = []
         item_rows = []
         order_sd_ids = []
+        _seen_order_ids: set = set()
         skipped_no_date = 0
         for o in orders:
             sd_id = _safe_id(o.get("SD_id"))
@@ -229,6 +230,10 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
             if not order_date:
                 skipped_no_date += 1
                 continue
+            if sd_id in _seen_order_ids:
+                logger.warning("Takroriy order sd_id o'tkazib yuborildi: %s", sd_id)
+                continue
+            _seen_order_ids.add(sd_id)
             order_rows.append((
                 sd_id, order_date, _to_int(o.get("status")),
                 _nested_id(o.get("agent")), _nested_id(o.get("client")),
@@ -360,7 +365,7 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
 
             # Yangi orderlarni yozish
             conn.executemany("""
-                INSERT INTO orders (sd_id, date, status, agent_sd_id, client_sd_id, total_after_discount)
+                INSERT OR REPLACE INTO orders (sd_id, date, status, agent_sd_id, client_sd_id, total_after_discount)
                 VALUES (?, ?, ?, ?, ?, ?)
             """, order_rows)
 
