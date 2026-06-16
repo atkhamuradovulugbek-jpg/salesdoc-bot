@@ -216,11 +216,15 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
         order_rows = []
         item_rows = []
         order_sd_ids = []
+        seen_order_ids = set()  # API ba'zan bir xil orderni 2 marta qaytaradi — dublikatni tashlab yuboramiz
         skipped_no_date = 0
         for o in orders:
             sd_id = _safe_id(o.get("SD_id"))
             if not sd_id:
                 continue
+            if sd_id in seen_order_ids:
+                continue
+            seen_order_ids.add(sd_id)
             order_date = _normalize_date(o.get("dateCreate"), "")
             if not order_date:
                 order_date = _normalize_date(o.get("orderCreated"), "")
@@ -349,19 +353,30 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
                 (lookback_from, today),
             ).fetchall()
             old_ids = [r["sd_id"] for r in old_order_ids]
-            if old_ids:
+            # Item'larni tozalanadigan sd_id'lar: sana oralig'idagi eskilari +
+            # yangi tortilganlari (sanasi oraliqdan tashqarida bo'lsa ham — masalan
+            # o'tgan oyda yaratilib shu oyda o'zgargan order'lar).
+            ids_to_clear = set(old_ids) | set(order_sd_ids)
+            if ids_to_clear:
+                ids_list = list(ids_to_clear)
                 CHUNK = 500
-                for i in range(0, len(old_ids), CHUNK):
-                    chunk = old_ids[i:i + CHUNK]
+                for i in range(0, len(ids_list), CHUNK):
+                    chunk = ids_list[i:i + CHUNK]
                     placeholders = ",".join("?" * len(chunk))
                     conn.execute(f"DELETE FROM order_items WHERE order_sd_id IN ({placeholders})", chunk)
+            if old_ids:
                 conn.execute("DELETE FROM orders WHERE date >= ? AND date <= ?", (lookback_from, today))
                 logger.info("⏏ %d ta eski order o'chirildi (sana: %s — %s)", len(old_ids), lookback_from, today)
 
-            # Yangi orderlarni yozish
+            # Yangi orderlarni yozish — upsert (bor bo'lsa yangilanadi).
+            # Oraliqdan tashqaridagi eski order qayta kelsa UNIQUE xatosi bermaydi.
             conn.executemany("""
                 INSERT INTO orders (sd_id, date, status, agent_sd_id, client_sd_id, total_after_discount)
                 VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(sd_id) DO UPDATE SET
+                    date=excluded.date, status=excluded.status,
+                    agent_sd_id=excluded.agent_sd_id, client_sd_id=excluded.client_sd_id,
+                    total_after_discount=excluded.total_after_discount
             """, order_rows)
 
             if item_rows:
