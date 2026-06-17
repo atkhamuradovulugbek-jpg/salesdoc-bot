@@ -10,9 +10,10 @@ import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
 from telegram.ext import Application
 
-from config import TIMEZONE
+from config import AGENT_MONITOR_ENABLED, MONITOR_INTERVAL_MIN, TIMEZONE
 from sync import run_sync
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,19 @@ async def _evening(app: Application) -> None:
         logger.exception("Guruh kartochkalari xatosi: %s", exc)
 
 
+async def _agent_monitor_check(app: Application) -> None:
+    """Har MONITOR_INTERVAL_MIN daqiqada agentlar intizomini tekshiradi."""
+    from agent_monitor import run_check
+    from bot import notify_admins
+    try:
+        msg = await run_check(only_new=True)
+        if msg:
+            await notify_admins(app, msg)
+            logger.info("🕵️ Agent nazorati: ogohlantirish yuborildi")
+    except Exception as exc:
+        logger.exception("Agent nazorati xatosi: %s", exc)
+
+
 def setup_scheduler(app: Application) -> None:
     scheduler = AsyncIOScheduler(timezone=TIMEZONE)
 
@@ -155,5 +169,20 @@ def setup_scheduler(app: Application) -> None:
         misfire_grace_time=1800,
     )
 
+    # Agent nazorati — har MONITOR_INTERVAL_MIN daqiqada (ish vaqti ichida o'zi ishlaydi)
+    if AGENT_MONITOR_ENABLED:
+        scheduler.add_job(
+            _agent_monitor_check,
+            IntervalTrigger(minutes=MONITOR_INTERVAL_MIN, timezone=TIMEZONE),
+            args=[app],
+            id="agent_monitor",
+            replace_existing=True,
+            misfire_grace_time=600,
+        )
+
     scheduler.start()
-    logger.info("Scheduler ishga tushdi: 03:00 (TO'LIQ), 12:00 (TEZ), 15:00 (TO'LIQ), 20:00 (TEZ+guruh) — %s", TIMEZONE)
+    logger.info(
+        "Scheduler ishga tushdi: 03:00 (TO'LIQ), 12:00 (TEZ), 15:00 (TO'LIQ), 20:00 (TEZ+guruh), "
+        "agent nazorati har %d daq (%s) — %s",
+        MONITOR_INTERVAL_MIN, "yoqilgan" if AGENT_MONITOR_ENABLED else "o'chiq", TIMEZONE,
+    )
