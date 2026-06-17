@@ -64,6 +64,7 @@ MAIN_MENU_KEYBOARD = InlineKeyboardMarkup([
      InlineKeyboardButton("🔴 Tez tugaydiganlar", callback_data="menu:low_stock")],
     [InlineKeyboardButton("💀 O'lik do'konlar", callback_data="menu:dead_outlets"),
      InlineKeyboardButton("🕵️ Agent nazorati", callback_data="menu:agent_monitor")],
+    [InlineKeyboardButton("📍 GPS (kim noto'g'ri ishlayapti)", callback_data="menu:gps")],
     [InlineKeyboardButton("📊 Agent planlari", callback_data="menu:plans"),
      InlineKeyboardButton("📤 Guruh sozlash", callback_data="menu:groupset")],
     [InlineKeyboardButton("🔄 Tez yangilash", callback_data="menu:sync_now"),
@@ -275,6 +276,17 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             text = await run_snapshot()
         except Exception as exc:
             logger.exception("Agent nazorati (qo'lda) xatosi: %s", exc)
+            text = f"⚠️ Xatolik:\n<code>{str(exc)[:300]}</code>"
+        await send_report(query, text, back_to="back:main")
+        return
+
+    if data == "menu:gps":
+        await query.message.edit_text("📍 GPS tekshirilmoqda...")
+        from agent_monitor import run_summary
+        try:
+            text = await run_summary()
+        except Exception as exc:
+            logger.exception("GPS xulosa xatosi: %s", exc)
             text = f"⚠️ Xatolik:\n<code>{str(exc)[:300]}</code>"
         await send_report(query, text, back_to="back:main")
         return

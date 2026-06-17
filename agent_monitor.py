@@ -284,6 +284,62 @@ async def run_check(only_new: bool = True) -> str | None:
     return msg
 
 
+async def run_summary() -> str:
+    """📍 GPS tugmasi uchun: QISQA, agent bo'yicha. Har bir muammoli agent
+    bitta qatorda — kim va qanday muammo borligini ko'rsatadi."""
+    now = datetime.now(TZ).replace(tzinfo=None)
+    visits = await _fetch_today_visits()
+    f = analyze(visits, now)
+
+    # Agent bo'yicha muammolarni yig'amiz: {agent_name: {...sanoqlar}}
+    probs: dict[str, dict] = {}
+
+    def _slot(name: str) -> dict:
+        return probs.setdefault(name, {"absent": 0, "fast": 0, "rapid": 0, "nogps": 0})
+
+    for a in f["absent"]:
+        _slot(a["name"])["absent"] = a["mins"]
+    for x in f["fast"]:
+        _slot(x["agent"])["fast"] += 1
+    for x in f["rapid"]:
+        _slot(x["agent"])["rapid"] += 1
+    for x in f["nogps"]:
+        _slot(x["agent"])["nogps"] += 1
+
+    header = (
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"📍 <b>GPS — NOTO'G'RI ISHLAYOTGANLAR</b>\n"
+        f"🕐 {_hhmm(now)}  ·  👥 {f['agent_count']} agent\n"
+        "━━━━━━━━━━━━━━━━━━━━\n\n"
+    )
+
+    if not probs:
+        return header + "✅ Hammasi joyida — muammo topilmadi."
+
+    # Eng ko'p muammoli (yoki yo'qolgan) agent tepada
+    def _score(p: dict) -> int:
+        return (1 if p["absent"] else 0) * 1000 + p["fast"] + p["rapid"] + p["nogps"]
+
+    lines = []
+    for name in sorted(probs, key=lambda n: -_score(probs[n])):
+        p = probs[name]
+        tags = []
+        if p["absent"]:
+            tags.append(f"😴 {p['absent']} daq yo'q")
+        if p["rapid"]:
+            tags.append(f"🏃 {p['rapid']} ketma-ket tez")
+        if p["fast"]:
+            tags.append(f"⚡ {p['fast']} tez vizit")
+        if p["nogps"]:
+            tags.append(f"🚫 {p['nogps']} GPS'siz")
+        lines.append(f"• <b>{name}</b>\n   {', '.join(tags)}")
+
+    msg = header + "\n".join(lines)
+    if len(msg) > 3900:
+        msg = msg[:3900] + "\n\n<i>...ro'yxat uzun, qisqartirildi.</i>"
+    return msg
+
+
 async def run_snapshot() -> str:
     """Qo'lda tugma uchun: hozirgi to'liq holat (takror filtri yo'q)."""
     now = datetime.now(TZ).replace(tzinfo=None)
