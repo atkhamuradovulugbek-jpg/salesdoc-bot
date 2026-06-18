@@ -121,10 +121,12 @@ async def _agent_monitor_check(app: Application) -> None:
     from agent_monitor import run_check
     from bot import notify_admins
     try:
-        msg = await run_check(only_new=True)
-        if msg:
-            await notify_admins(app, msg)
-            logger.info("🕵️ Agent nazorati: ogohlantirish yuborildi")
+        # SHAHAR va VILOYAT alohida xabarlar (supervayzerlarga alohida forward uchun)
+        msgs = await run_check(only_new=True)
+        for m in msgs:
+            await notify_admins(app, m)
+        if msgs:
+            logger.info("🕵️ Agent nazorati: %d ta ogohlantirish yuborildi", len(msgs))
     except Exception as exc:
         logger.exception("Agent nazorati xatosi: %s", exc)
 

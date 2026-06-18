@@ -317,23 +317,43 @@ def _classify_stats(stats: list[dict]) -> tuple[list[dict], int]:
     return problems, healthy
 
 
-def build_compact(findings: dict, now: datetime, show_when_clean: bool = True) -> str | None:
+_CAT_LABEL = {"city": "🏙️ SHAHAR", "region": "🏘️ VILOYAT"}
+
+
+def _filter_by_category(stats: list[dict], category: str | None) -> list[dict]:
+    """Agentlarni shahar/viloyat bo'yicha ajratadi (reports.classify_agent orqali).
+    Hududi tanilmagan ('unknown') agentlar SHAHAR guruhiga qo'shiladi — hech kim
+    ikkala xabardан tushib qolmasin."""
+    if not category:
+        return stats
+    from reports import classify_agent
+    if category == "city":
+        return [s for s in stats if classify_agent(s["name"]) in ("city", "unknown")]
+    return [s for s in stats if classify_agent(s["name"]) == category]
+
+
+def build_compact(findings: dict, now: datetime, category: str | None = None,
+                  show_when_clean: bool = True) -> str | None:
     """Kompakt hisobot: muammoli agentlar yuqorida (bittadan), sog'lomlar yig'ilgan.
-    Muammo yo'q va show_when_clean=False bo'lsa None qaytaradi."""
-    problems, healthy = _classify_stats(findings["stats"])
+    category='city'/'region' bo'lsa faqat o'sha guruh. Muammo yo'q va
+    show_when_clean=False bo'lsa None qaytaradi."""
+    stats = _filter_by_category(findings["stats"], category)
+    problems, healthy = _classify_stats(stats)
     reds = sum(1 for p in problems if p["status"] == "🔴")
     yellows = sum(1 for p in problems if p["status"] == "🟡")
+
+    cat_txt = f" · {_CAT_LABEL[category]}" if category in _CAT_LABEL else ""
 
     if not problems:
         if not show_when_clean:
             return None
         return (
-            f"🕵️ <b>AGENT NAZORATI</b> · {_hhmm(now)}\n"
+            f"🕵️ <b>AGENT NAZORATI</b>{cat_txt} · {_hhmm(now)}\n"
             f"✅ Hammasi joyida — {healthy} agent normal ishlayapti."
         )
 
     lines = [
-        f"🕵️ <b>AGENT NAZORATI</b> · {_hhmm(now)}",
+        f"🕵️ <b>AGENT NAZORATI</b>{cat_txt} · {_hhmm(now)}",
         f"🔴 {reds} · 🟡 {yellows} · ✅ {healthy} normal",
         "",
     ]
@@ -355,10 +375,11 @@ def build_compact(findings: dict, now: datetime, show_when_clean: bool = True) -
     return msg
 
 
-def _compact_signature(findings: dict) -> str:
+def _compact_signature(findings: dict, category: str | None = None) -> str:
     """Holat 'belgisi' — daqiqalarsiz (ular har safar o'zgaradi). Faqat qaysi agent,
     qanday status va shubhali soni o'zgarsa — yangi xabar yuboriladi."""
-    problems, _ = _classify_stats(findings["stats"])
+    stats = _filter_by_category(findings["stats"], category)
+    problems, _ = _classify_stats(stats)
     parts = [f"{p['agent_id']}:{p['status']}:{p['susp']}:{p['visits']}" for p in problems]
     raw = "|".join(sorted(parts))
     return hashlib.md5(raw.encode()).hexdigest()
@@ -371,42 +392,50 @@ async def _fetch_today_visits() -> list[dict]:
     return await api.get_visits(today, today)
 
 
-async def run_check(only_new: bool = True) -> str | None:
-    """Avtomatik tekshiruv (scheduler chaqiradi). Kompakt hisobot.
-    Faqat holat o'zgarganda (yangi muammo/status) yuboradi — takror spam emas.
-    Muammo yo'q yoki o'zgarish bo'lmasa None."""
+async def run_check(only_new: bool = True) -> list[str]:
+    """Avtomatik tekshiruv (scheduler chaqiradi). SHAHAR va VILOYAT uchun ALOHIDA
+    ikkita kompakt xabar (supervayzerlarga alohida forward qilish uchun).
+    Faqat holat o'zgargan kategoriya yuboriladi — takror spam emas.
+    O'zgarish bo'lmasa bo'sh ro'yxat."""
     now = datetime.now(TZ).replace(tzinfo=None)
     today = now.date().isoformat()
 
     if not (WORK_START_HOUR <= now.hour < WORK_END_HOUR):
         logger.info("Agent nazorati: ish vaqtidan tashqari (%s), o'tkazib yuborildi", _hhmm(now))
-        return None
+        return []
 
     visits = await _fetch_today_visits()
     findings = analyze(visits, now)
-
     state = _load_state(today)
-    sig = _compact_signature(findings)
-    changed = state.get("last_sig") != sig
-    msg = build_compact(findings, now, show_when_clean=False) if changed else None
 
-    state["last_sig"] = sig
+    messages: list[str] = []
+    sent_cats = []
+    for cat in ("city", "region"):  # shahar tepada, viloyat keyin
+        sig = _compact_signature(findings, cat)
+        key = f"last_sig_{cat}"
+        if state.get(key) != sig:
+            msg = build_compact(findings, now, category=cat, show_when_clean=False)
+            if msg:
+                messages.append(msg)
+                sent_cats.append(cat)
+            state[key] = sig
     _save_state(state)
 
-    problems, healthy = _classify_stats(findings["stats"])
     logger.info(
-        "Agent nazorati: agentlar=%d, muammoli=%d, normal=%d, o'zgardi=%s, xabar=%s",
-        findings["agent_count"], len(problems), healthy, changed, "bor" if msg else "yo'q",
+        "Agent nazorati: agentlar=%d, yuborilgan kategoriyalar=%s",
+        findings["agent_count"], sent_cats or "yo'q",
     )
-    return msg
+    return messages
 
 
 async def run_summary() -> str:
-    """📍 GPS tugmasi uchun: kompakt hisobot (muammoli yuqorida, sog'lom yig'ilgan)."""
+    """📍 GPS tugmasi uchun: shahar va viloyat alohida bo'limда (bitta xabarда)."""
     now = datetime.now(TZ).replace(tzinfo=None)
     visits = await _fetch_today_visits()
     findings = analyze(visits, now)
-    return build_compact(findings, now, show_when_clean=True)
+    city = build_compact(findings, now, category="city", show_when_clean=True)
+    region = build_compact(findings, now, category="region", show_when_clean=True)
+    return f"{city}\n\n{region}"
 
 
 async def run_snapshot() -> str:
