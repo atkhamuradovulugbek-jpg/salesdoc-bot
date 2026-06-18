@@ -6,7 +6,7 @@ import asyncio
 import logging
 from datetime import date, timedelta
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.error import NetworkError, RetryAfter, TimedOut
 from telegram.ext import (
@@ -71,6 +71,15 @@ MAIN_MENU_KEYBOARD = InlineKeyboardMarkup([
      InlineKeyboardButton("📥 To'liq yangilash", callback_data="menu:sync_full")],
 ])
 
+# Doimiy pastki tugma — xabarlar kelganda ham yozish maydoni ustida turaveradi.
+# Bosilganda to'liq inline menyuni ochadi (unknown_message ushlaydi).
+MENU_BUTTON_TEXT = "📋 Bosh menyu"
+PERSIST_KB = ReplyKeyboardMarkup(
+    [[MENU_BUTTON_TEXT]],
+    resize_keyboard=True,
+    is_persistent=True,
+)
+
 
 async def setgroup_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Guruh ichida ishlatilsa — shu guruh ID'sini saqlaydi."""
@@ -118,11 +127,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not is_allowed(update.effective_user.id):
         await deny(update)
         return
+    # 1) Doimiy pastki tugmani o'rnatamiz (yozish maydoni ustida turadi)
     await update.message.reply_text(
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         "👋 <b>SalesDoc Monitoring Bot</b>\n"
         "<i>Shiribom uchun ichki tizim</i>\n"
         "━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "📋 Pastдаги <b>«Bosh menyu»</b> tugmasi doim shu yerda turadi — "
+        "xabarlar kelganda ham bosib menyuga qaytasiz.",
+        parse_mode=ParseMode.HTML,
+        reply_markup=PERSIST_KB,
+    )
+    # 2) To'liq inline menyu
+    await update.message.reply_text(
         "📊 Bo'limni tanlang 👇",
         parse_mode=ParseMode.HTML,
         reply_markup=MAIN_MENU_KEYBOARD,
@@ -760,6 +777,16 @@ async def unknown_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await deny(update)
         return
 
+    # Doimiy pastki tugma — istalgan vaqt bosilsa, to'liq menyuni pastда ochadi
+    if update.message.text == MENU_BUTTON_TEXT:
+        context.user_data["waiting_for"] = None
+        await update.message.reply_text(
+            "📊 Bo'limni tanlang 👇",
+            parse_mode=ParseMode.HTML,
+            reply_markup=MAIN_MENU_KEYBOARD,
+        )
+        return
+
     waiting = context.user_data.get("waiting_for") or ""
 
     # Plan o'rnatish (savdo)
@@ -1003,7 +1030,10 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
 async def notify_admins(app: Application, text: str) -> None:
     for admin_id in ADMIN_IDS:
         try:
-            await app.bot.send_message(admin_id, text, parse_mode=ParseMode.HTML)
+            # PERSIST_KB — har xabarда doimiy "Bosh menyu" tugmasi pastда turaveradi
+            await app.bot.send_message(
+                admin_id, text, parse_mode=ParseMode.HTML, reply_markup=PERSIST_KB
+            )
         except Exception as exc:
             logger.error("Admin xabarnomasi xato (user %s): %s", admin_id, exc)
 
