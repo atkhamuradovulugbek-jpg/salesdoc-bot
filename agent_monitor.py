@@ -339,12 +339,12 @@ def build_compact(findings: dict, now: datetime, show_when_clean: bool = True) -
     ]
     for i, p in enumerate(problems, start=1):
         mins_txt = f"{p['mins']}daq yo'q" if p["mins"] > ABSENCE_ALERT_MIN else f"{p['mins']}daq oldin"
-        if p["susp"] > 0:
-            susp_txt = f"{p['susp']} shubhali ({_susp_breakdown(p)})"
-        else:
-            susp_txt = "shubhali yo'q"
+        # "Shubhali" yig'indisi olib tashlandi (u har xil narsalarni qo'shib chalkash edi).
+        # Faqat vizit soni + turlarga ajratilgan tafsilot: "24 vizit (12 tez, 3 ketma-ket, 16 GPSsiz)"
+        bd = _susp_breakdown(p)
+        vizit_txt = f"{p['visits']} vizit ({bd})" if bd else f"{p['visits']} vizit"
         lines.append(f"{p['status']} {i}. <b>{_short_name(p['name'])}</b>")
-        lines.append(f"    {mins_txt} · {p['visits']} vizit · {susp_txt}")
+        lines.append(f"    {mins_txt} · {vizit_txt}")
     if healthy:
         lines.append("")
         lines.append(f"✅ Qolgan {healthy} agent normal ishlayapti")
