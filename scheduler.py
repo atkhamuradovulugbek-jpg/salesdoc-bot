@@ -7,6 +7,8 @@ scheduler.py — Avtomatik vaqtlar:
 """
 
 import logging
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -17,6 +19,7 @@ from config import AGENT_MONITOR_ENABLED, MONITOR_INTERVAL_MIN, TIMEZONE
 from sync import run_sync
 
 logger = logging.getLogger(__name__)
+_TZ = ZoneInfo(TIMEZONE)
 
 
 async def _test_send_to_group(app: Application) -> None:
@@ -169,7 +172,10 @@ def setup_scheduler(app: Application) -> None:
         misfire_grace_time=1800,
     )
 
-    # Agent nazorati — har MONITOR_INTERVAL_MIN daqiqada (ish vaqti ichida o'zi ishlaydi)
+    # Agent nazorati — har MONITOR_INTERVAL_MIN daqiqada (ish vaqti ichida o'zi ishlaydi).
+    # next_run_time: bot ishga tushgach ~2 daqiqada BIRINCHI tekshiruv bo'ladi —
+    # aks holda IntervalTrigger har qayta ishga tushganда 40 daqiqani noldan sanaydi
+    # va tez-tez deploy bo'lsa hech qachon ishlamaydi.
     if AGENT_MONITOR_ENABLED:
         scheduler.add_job(
             _agent_monitor_check,
@@ -178,6 +184,7 @@ def setup_scheduler(app: Application) -> None:
             id="agent_monitor",
             replace_existing=True,
             misfire_grace_time=600,
+            next_run_time=datetime.now(_TZ) + timedelta(minutes=2),
         )
 
     scheduler.start()
