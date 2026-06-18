@@ -3,9 +3,31 @@ reports.py — Bazadan ma'lumot o'qib, tayyor matn hisobotlar qaytaradi.
 Bot (bot.py) shu funksiyalarni chaqiradi.
 """
 
+import os
 from datetime import date, timedelta
 
 from db import get_conn
+
+# Ketgan (noaktiv) agentning shu summadan kam qarzi "mayda qoldiq" deb yig'iladi
+DEAD_AGENT_HIDE_BELOW = int(os.getenv("DEAD_AGENT_HIDE_BELOW", "50000"))
+
+# Mijozni "haqiqiy" agentга bog'lash uchun umumiy SQL bo'lagi (CTE):
+# o'sha do'konga eng KO'P zakaz bergan AKTIV agent (teng bo'lsa — eng so'nggi).
+# Bu ketgan agent o'rniga kelgan yangi agentга qarzni avtomatik o'tkazadi.
+_CLIENT_AGENT_CTE = """
+    client_agent AS (
+        SELECT client_sd_id, agent_sd_id FROM (
+            SELECT o.client_sd_id, o.agent_sd_id,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY o.client_sd_id
+                       ORDER BY COUNT(*) DESC, MAX(o.date) DESC
+                   ) AS rn
+            FROM orders o
+            JOIN agents a ON a.sd_id = o.agent_sd_id AND a.active = 'Y'
+            GROUP BY o.client_sd_id, o.agent_sd_id
+        ) WHERE rn = 1
+    )
+"""
 
 
 def _fmt(amount: float) -> str:
@@ -404,31 +426,55 @@ def monthly_sales_report(year: int, month: int) -> str:
 # ------------------------------------------------------------------
 
 def agents_debt_report() -> str:
-    """Agentlar qarzi — har bir agentning JAMI qarzi (hamma do'konlar)."""
+    """Agentlar qarzi — qarz HAQIQIY (aktiv) agentга yoziladi.
+    Ketgan agentlarning mayda qoldig'i yig'iladi, katta egasiz qarz alohida ko'rinadi."""
     with get_conn() as conn:
-        rows = conn.execute("""
+        rows = conn.execute(f"""
+            WITH {_CLIENT_AGENT_CTE}
             SELECT
-                a.name AS agent,
+                COALESCE(a.name, 'Agentsiz (biriktirilmagan)') AS agent,
+                COALESCE(a.active, 'N') AS active,
                 SUM(ABS(b.balance)) AS debt,
                 COUNT(*) AS shops
             FROM balances b
             JOIN clients c ON c.sd_id = b.client_sd_id
-            LEFT JOIN agents a ON a.sd_id = c.primary_agent_sd_id
+            LEFT JOIN client_agent ca ON ca.client_sd_id = c.sd_id
+            LEFT JOIN agents a ON a.sd_id = COALESCE(ca.agent_sd_id, c.primary_agent_sd_id)
             WHERE b.balance < 0
-            GROUP BY c.primary_agent_sd_id
+            GROUP BY COALESCE(ca.agent_sd_id, c.primary_agent_sd_id)
             ORDER BY debt DESC
         """).fetchall()
 
     if not rows:
         return _header("🏪", "AGENTLAR QARZI") + "\n\n<i>Qarzdor agent yo'q.</i>"
 
+    total = sum(r["debt"] or 0 for r in rows)
+    active_rows = [r for r in rows if r["active"] == "Y"]
+    inactive_rows = [r for r in rows if r["active"] != "Y"]
+    orphan_big = [r for r in inactive_rows if (r["debt"] or 0) >= DEAD_AGENT_HIDE_BELOW]
+    residual = [r for r in inactive_rows if (r["debt"] or 0) < DEAD_AGENT_HIDE_BELOW]
+
     lines = [_header("🏪", "AGENTLAR QARZI"), ""]
-    total = 0.0
-    for i, r in enumerate(rows, 1):
-        agent = r["agent"] or "Agentsiz"
-        lines.append(f"{_rank(i)} {agent}")
+    for i, r in enumerate(active_rows, 1):
+        lines.append(f"{_rank(i)} {r['agent']}")
         lines.append(f"     💸 <b>{_fmt(r['debt'])}</b>  ·  🏪 {r['shops']} ta do'kon")
-        total += r["debt"] or 0
+
+    if orphan_big:
+        lines.append("")
+        lines.append("⚠️ <b>EGASIZ QARZ</b> <i>(ketgan agent / biriktirilmagan)</i>")
+        for r in orphan_big:
+            lines.append(f"   • {r['agent']}")
+            lines.append(f"     💸 <b>{_fmt(r['debt'])}</b>  ·  🏪 {r['shops']} ta do'kon")
+
+    if residual:
+        rsum = sum(r["debt"] or 0 for r in residual)
+        rshops = sum(r["shops"] or 0 for r in residual)
+        lines.append("")
+        lines.append(
+            f"🗂 <b>Eski agentlar qoldig'i:</b> {len(residual)} ta agent · "
+            f"{_fmt(rsum)} · 🏪 {rshops} do'kon"
+        )
+
     lines.append("")
     lines.append(_footer("JAMI QARZ", _fmt(total)))
     return "\n".join(lines)
@@ -444,11 +490,13 @@ def agent_debt_detail(agent_sd_id: str) -> str:
         agent_row = conn.execute("SELECT name FROM agents WHERE sd_id=?", (agent_sd_id,)).fetchone()
         agent_name = agent_row["name"] if agent_row else "Noma'lum agent"
 
-        rows = conn.execute("""
+        rows = conn.execute(f"""
+            WITH {_CLIENT_AGENT_CTE}
             SELECT b.client_name AS shop, ABS(b.balance) AS debt
             FROM balances b
             JOIN clients c ON c.sd_id = b.client_sd_id
-            WHERE c.primary_agent_sd_id = ? AND b.balance <= ?
+            LEFT JOIN client_agent ca ON ca.client_sd_id = c.sd_id
+            WHERE COALESCE(ca.agent_sd_id, c.primary_agent_sd_id) = ? AND b.balance <= ?
             ORDER BY debt DESC
         """, (agent_sd_id, -MIN_DEBT)).fetchall()
 
