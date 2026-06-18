@@ -36,6 +36,9 @@ FAST_VISIT_SECONDS: int = int(os.getenv("FAST_VISIT_SECONDS", "60"))       # shu
 RAPID_VISIT_SECONDS: int = int(os.getenv("RAPID_VISIT_SECONDS", "60"))     # ketma-ket vizitlar orasi shundan kam = shubhali
 WORK_START_HOUR: int = int(os.getenv("WORK_START_HOUR", "9"))
 WORK_END_HOUR: int = int(os.getenv("WORK_END_HOUR", "17"))
+MONITOR_RED_MIN: int = int(os.getenv("MONITOR_RED_MIN", "90"))             # shuncha daqiqa vizitsiz = 🔴 qizil
+SUSPICIOUS_SHOW: int = int(os.getenv("SUSPICIOUS_SHOW", "8"))            # shuncha shubhali vizit = muammoli deb ko'rsatish
+SUSPICIOUS_RED: int = int(os.getenv("SUSPICIOUS_RED", "15"))              # shuncha shubhali vizit = 🔴 qizil
 
 # Vaqt mintaqasi
 TIMEZONE: str = "Asia/Tashkent"

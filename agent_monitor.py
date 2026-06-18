@@ -18,11 +18,15 @@ from zoneinfo import ZoneInfo
 from config import (
     ABSENCE_ALERT_MIN,
     FAST_VISIT_SECONDS,
+    MONITOR_RED_MIN,
     RAPID_VISIT_SECONDS,
+    SUSPICIOUS_RED,
+    SUSPICIOUS_SHOW,
     TIMEZONE,
     WORK_END_HOUR,
     WORK_START_HOUR,
 )
+import hashlib
 from db import get_conn
 from salesdoc_api import get_api
 
@@ -105,7 +109,9 @@ def analyze(visits: list[dict], now: datetime) -> dict:
             "name": v.get("agent_name") or agent_id,
             "starts": [],          # (start_dt, visit)
             "last_activity": None,  # eng oxirgi end yoki start
+            "visits": 0, "fast": 0, "nogps": 0, "rapid": 0,
         })
+        ag["visits"] += 1
         if start:
             ag["starts"].append((start, v))
         last = end or start
@@ -116,6 +122,7 @@ def analyze(visits: list[dict], now: datetime) -> dict:
         if start and end:
             dur = (end - start).total_seconds()
             if 0 <= dur < FAST_VISIT_SECONDS:
+                ag["fast"] += 1
                 fast_visits.append({
                     "agent": ag["name"], "client": v.get("client_name") or "",
                     "start": start, "dur_sec": int(dur), "sig": _sig(v),
@@ -123,6 +130,7 @@ def analyze(visits: list[dict], now: datetime) -> dict:
 
         # GPS'siz vizit
         if str(v.get("gps_visit")) in ("0", "False", "false", "", "None"):
+            ag["nogps"] += 1
             nogps_visits.append({
                 "agent": ag["name"], "client": v.get("client_name") or "",
                 "start": start, "sig": _sig(v),
@@ -149,6 +157,7 @@ def analyze(visits: list[dict], now: datetime) -> dict:
         for i in range(1, len(starts)):
             gap = (starts[i][0] - starts[i - 1][0]).total_seconds()
             if 0 <= gap < RAPID_VISIT_SECONDS:
+                ag["rapid"] += 1
                 v = starts[i][1]
                 prev = starts[i - 1][1]
                 rapid.append({
@@ -160,12 +169,26 @@ def analyze(visits: list[dict], now: datetime) -> dict:
                     "sig": _sig(v),
                 })
 
+    # Har agent bo'yicha yig'ma statistika (kompakt hisobot uchun)
+    stats: list[dict] = []
+    for agent_id, ag in by_agent.items():
+        last = ag["last_activity"]
+        mins = int((now - last).total_seconds() / 60) if last else 9999
+        susp = ag["fast"] + ag["rapid"] + ag["nogps"]
+        stats.append({
+            "agent_id": agent_id, "name": ag["name"],
+            "visits": ag["visits"], "fast": ag["fast"],
+            "rapid": ag["rapid"], "nogps": ag["nogps"],
+            "susp": susp, "mins": mins, "last": last,
+        })
+
     return {
         "in_work_hours": in_work_hours,
         "absent": absent,
         "fast": fast_visits,
         "rapid": rapid,
         "nogps": nogps_visits,
+        "stats": stats,
         "agent_count": len(by_agent),
     }
 
@@ -254,6 +277,93 @@ def _build_message(findings: dict, now: datetime, only_new: bool, state: dict) -
     return msg
 
 
+def _short_name(name: str) -> str:
+    """Ismni qisqartiradi: 'Rahmonov Burhoniddin (Shayhontohur)' -> familiya + hudud."""
+    terr = ""
+    if "(" in name and name.endswith(")"):
+        terr = name[name.rfind("(") + 1:-1].strip()
+        name = name[:name.rfind("(")].strip()
+    first = name.split()[0] if name.split() else name
+    return f"{first} ({terr})" if terr else first
+
+
+def _susp_breakdown(s: dict) -> str:
+    parts = []
+    if s["fast"]:
+        parts.append(f"{s['fast']} tez")
+    if s["rapid"]:
+        parts.append(f"{s['rapid']} ketma-ket")
+    if s["nogps"]:
+        parts.append(f"{s['nogps']} GPSsiz")
+    return ", ".join(parts)
+
+
+def _classify_stats(stats: list[dict]) -> tuple[list[dict], int]:
+    """Agentlarni muammoli (🔴/🟡) va sog'lom (yashirin) ga ajratadi."""
+    problems = []
+    healthy = 0
+    for s in stats:
+        is_problem = s["mins"] > ABSENCE_ALERT_MIN or s["susp"] >= SUSPICIOUS_SHOW
+        if not is_problem:
+            healthy += 1
+            continue
+        if s["mins"] > MONITOR_RED_MIN or s["susp"] >= SUSPICIOUS_RED:
+            status = "🔴"
+        else:
+            status = "🟡"
+        problems.append({**s, "status": status})
+    order = {"🔴": 0, "🟡": 1}
+    problems.sort(key=lambda p: (order[p["status"]], -p["mins"], -p["susp"]))
+    return problems, healthy
+
+
+def build_compact(findings: dict, now: datetime, show_when_clean: bool = True) -> str | None:
+    """Kompakt hisobot: muammoli agentlar yuqorida (bittadan), sog'lomlar yig'ilgan.
+    Muammo yo'q va show_when_clean=False bo'lsa None qaytaradi."""
+    problems, healthy = _classify_stats(findings["stats"])
+    reds = sum(1 for p in problems if p["status"] == "🔴")
+    yellows = sum(1 for p in problems if p["status"] == "🟡")
+
+    if not problems:
+        if not show_when_clean:
+            return None
+        return (
+            f"🕵️ <b>AGENT NAZORATI</b> · {_hhmm(now)}\n"
+            f"✅ Hammasi joyida — {healthy} agent normal ishlayapti."
+        )
+
+    lines = [
+        f"🕵️ <b>AGENT NAZORATI</b> · {_hhmm(now)}",
+        f"🔴 {reds} · 🟡 {yellows} · ✅ {healthy} normal",
+        "",
+    ]
+    for i, p in enumerate(problems, start=1):
+        mins_txt = f"{p['mins']}daq yo'q" if p["mins"] > ABSENCE_ALERT_MIN else f"{p['mins']}daq oldin"
+        if p["susp"] > 0:
+            susp_txt = f"{p['susp']} shubhali ({_susp_breakdown(p)})"
+        else:
+            susp_txt = "shubhali yo'q"
+        lines.append(f"{p['status']} {i}. <b>{_short_name(p['name'])}</b>")
+        lines.append(f"    {mins_txt} · {p['visits']} vizit · {susp_txt}")
+    if healthy:
+        lines.append("")
+        lines.append(f"✅ Qolgan {healthy} agent normal ishlayapti")
+
+    msg = "\n".join(lines)
+    if len(msg) > 3900:
+        msg = msg[:3900] + "\n\n<i>...ro'yxat uzun, qisqartirildi.</i>"
+    return msg
+
+
+def _compact_signature(findings: dict) -> str:
+    """Holat 'belgisi' — daqiqalarsiz (ular har safar o'zgaradi). Faqat qaysi agent,
+    qanday status va shubhali soni o'zgarsa — yangi xabar yuboriladi."""
+    problems, _ = _classify_stats(findings["stats"])
+    parts = [f"{p['agent_id']}:{p['status']}:{p['susp']}:{p['visits']}" for p in problems]
+    raw = "|".join(sorted(parts))
+    return hashlib.md5(raw.encode()).hexdigest()
+
+
 async def _fetch_today_visits() -> list[dict]:
     today = datetime.now(TZ).date().isoformat()
     api = get_api()
@@ -262,8 +372,9 @@ async def _fetch_today_visits() -> list[dict]:
 
 
 async def run_check(only_new: bool = True) -> str | None:
-    """Avtomatik tekshiruv (scheduler chaqiradi). Faqat YANGI muammolarni
-    qaytaradi (takror emas). Muammo yo'q bo'lsa None."""
+    """Avtomatik tekshiruv (scheduler chaqiradi). Kompakt hisobot.
+    Faqat holat o'zgarganda (yangi muammo/status) yuboradi — takror spam emas.
+    Muammo yo'q yoki o'zgarish bo'lmasa None."""
     now = datetime.now(TZ).replace(tzinfo=None)
     today = now.date().isoformat()
 
@@ -273,71 +384,29 @@ async def run_check(only_new: bool = True) -> str | None:
 
     visits = await _fetch_today_visits()
     findings = analyze(visits, now)
+
     state = _load_state(today)
-    msg = _build_message(findings, now, only_new=True, state=state)
+    sig = _compact_signature(findings)
+    changed = state.get("last_sig") != sig
+    msg = build_compact(findings, now, show_when_clean=False) if changed else None
+
+    state["last_sig"] = sig
     _save_state(state)
+
+    problems, healthy = _classify_stats(findings["stats"])
     logger.info(
-        "Agent nazorati: agentlar=%d, yo'q=%d, tez=%d, ketma-ket=%d, gps-siz=%d, xabar=%s",
-        findings["agent_count"], len(findings["absent"]), len(findings["fast"]),
-        len(findings["rapid"]), len(findings["nogps"]), "bor" if msg else "yo'q",
+        "Agent nazorati: agentlar=%d, muammoli=%d, normal=%d, o'zgardi=%s, xabar=%s",
+        findings["agent_count"], len(problems), healthy, changed, "bor" if msg else "yo'q",
     )
     return msg
 
 
 async def run_summary() -> str:
-    """📍 GPS tugmasi uchun: QISQA, agent bo'yicha. Har bir muammoli agent
-    bitta qatorda — kim va qanday muammo borligini ko'rsatadi."""
+    """📍 GPS tugmasi uchun: kompakt hisobot (muammoli yuqorida, sog'lom yig'ilgan)."""
     now = datetime.now(TZ).replace(tzinfo=None)
     visits = await _fetch_today_visits()
-    f = analyze(visits, now)
-
-    # Agent bo'yicha muammolarni yig'amiz: {agent_name: {...sanoqlar}}
-    probs: dict[str, dict] = {}
-
-    def _slot(name: str) -> dict:
-        return probs.setdefault(name, {"absent": 0, "fast": 0, "rapid": 0, "nogps": 0})
-
-    for a in f["absent"]:
-        _slot(a["name"])["absent"] = a["mins"]
-    for x in f["fast"]:
-        _slot(x["agent"])["fast"] += 1
-    for x in f["rapid"]:
-        _slot(x["agent"])["rapid"] += 1
-    for x in f["nogps"]:
-        _slot(x["agent"])["nogps"] += 1
-
-    header = (
-        "━━━━━━━━━━━━━━━━━━━━\n"
-        f"📍 <b>GPS — NOTO'G'RI ISHLAYOTGANLAR</b>\n"
-        f"🕐 {_hhmm(now)}  ·  👥 {f['agent_count']} agent\n"
-        "━━━━━━━━━━━━━━━━━━━━\n\n"
-    )
-
-    if not probs:
-        return header + "✅ Hammasi joyida — muammo topilmadi."
-
-    # Eng ko'p muammoli (yoki yo'qolgan) agent tepada
-    def _score(p: dict) -> int:
-        return (1 if p["absent"] else 0) * 1000 + p["fast"] + p["rapid"] + p["nogps"]
-
-    lines = []
-    for name in sorted(probs, key=lambda n: -_score(probs[n])):
-        p = probs[name]
-        tags = []
-        if p["absent"]:
-            tags.append(f"😴 {p['absent']} daq yo'q")
-        if p["rapid"]:
-            tags.append(f"🏃 {p['rapid']} ketma-ket tez")
-        if p["fast"]:
-            tags.append(f"⚡ {p['fast']} tez vizit")
-        if p["nogps"]:
-            tags.append(f"🚫 {p['nogps']} GPS'siz")
-        lines.append(f"• <b>{name}</b>\n   {', '.join(tags)}")
-
-    msg = header + "\n".join(lines)
-    if len(msg) > 3900:
-        msg = msg[:3900] + "\n\n<i>...ro'yxat uzun, qisqartirildi.</i>"
-    return msg
+    findings = analyze(visits, now)
+    return build_compact(findings, now, show_when_clean=True)
 
 
 async def run_snapshot() -> str:
