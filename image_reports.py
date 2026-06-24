@@ -23,6 +23,8 @@ from reports import (
     DEFAULT_REGION_DAILY_PLAN,
     DEFAULT_REGION_SALES_PLAN,
     DEFAULT_VISIT_PLAN,
+    STOCK_AVG_DAYS,
+    _calc_stock_days,
     classify_agent,
     workdays_in_month,
     workdays_passed,
@@ -838,3 +840,160 @@ def _draw_color_circle(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, mark
     if marker == "ultra":
         draw.line([(cx - 11, cy + 2), (cx - 3, cy + 11)], fill=WHITE, width=5)
         draw.line([(cx - 3, cy + 11), (cx + 12, cy - 9)], fill=WHITE, width=5)
+
+
+# ------------------------------------------------------------------
+# TEZ TUGAYDIGAN MAHSULOTLAR — rasm jadval (3-surat ko'rinishi)
+# ------------------------------------------------------------------
+
+LOW_STOCK_MAX_ROWS = 30  # rasmda ko'rsatiladigan eng ko'p qator
+
+# Qator fonlari va holat ranglari (qizil <2 kun, sariq <=5 kun)
+LOW_RED_ROW = (255, 214, 214)
+LOW_YELLOW_ROW = (255, 246, 210)
+LOW_RED_CHIP = (224, 60, 68)
+LOW_YELLOW_CHIP = (242, 202, 70)
+LOW_RED_KUN = (170, 30, 40)
+
+
+def _compute_low_stock_items(max_days: int = 5) -> Optional[tuple[list[dict], str]]:
+    """≤ max_days kunlik qoldiq qolgan tovarlar (eng kritik birinchi).
+    Qaytaradi: (items, last_updated) yoki None (agar yo'q bo'lsa).
+    reports.low_stock_report bilan bir xil logika (lekin tuzilgan ma'lumot)."""
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT
+                s.product_sd_id,
+                MAX(s.product_name) AS name,
+                SUM(s.quantity) AS stock,
+                MAX(s.updated_at) AS upd,
+                COALESCE((
+                    SELECT SUM(oi.quantity)
+                    FROM order_items oi
+                    JOIN orders o ON o.sd_id = oi.order_sd_id
+                    WHERE oi.product_sd_id = s.product_sd_id
+                      AND o.status IN (1, 2, 3)
+                      AND o.date >= date('now', '-{STOCK_AVG_DAYS} days')
+                ), 0) AS sold
+            FROM stock s
+            GROUP BY s.product_sd_id
+        """).fetchall()
+
+    items = []
+    for r in rows:
+        stock = float(r["stock"] or 0)
+        sold = float(r["sold"] or 0)
+        days = _calc_stock_days(stock, sold)
+        if days <= max_days:
+            items.append({"name": r["name"] or "—", "stock": stock, "days": days})
+
+    if not items:
+        return None
+    items.sort(key=lambda x: x["days"])
+    last_updated = max((r["upd"] or "" for r in rows), default="")[:16]
+    return items, last_updated
+
+
+def _draw_low_stock_image(all_items: list[dict], last_updated: str, max_days: int) -> bytes:
+    """Tuzilgan ma'lumotdan PNG jadval chizadi (test qilsa bo'ladigan qism)."""
+    total = len(all_items)
+    items = all_items[:LOW_STOCK_MAX_ROWS]
+
+    W = 1560
+    C_NAME = 780
+    C_QOLDIQ = 300
+    C_KUN = 230
+    C_HOLAT = 250
+    assert C_NAME + C_QOLDIQ + C_KUN + C_HOLAT == W
+
+    H_TITLE = 150
+    H_HEADER = 92
+    H_ROW_MIN = 92
+    LINE_H = 46
+    PAD_NAME = 18
+
+    f_title = _font(40, bold=True)
+    f_sub = _font(25, bold=False)
+    f_h = _font(32, bold=True)
+    f_name = _font(31, bold=True)
+    f_cell = _font(32, bold=True)
+
+    # nomlarni oldindan 2 satrga wraplab, qator balandliklarini hisoblaymiz
+    prepared = []
+    for it in items:
+        full = _wrap_text(it["name"], f_name, C_NAME - 2 * PAD_NAME)
+        if len(full) > 2:
+            lines = full[:2]
+            lines[1] = lines[1].rstrip() + "…"
+        else:
+            lines = full or [""]
+        rh = max(H_ROW_MIN, len(lines) * LINE_H + 36)
+        prepared.append((lines, it, rh))
+
+    foot_h = 58 if total > len(items) else 24
+    H = H_TITLE + H_HEADER + sum(rh for _, _, rh in prepared) + foot_h
+
+    img = Image.new("RGB", (W, H), BG_CREAM)
+    draw = ImageDraw.Draw(img)
+
+    # Sarlavha (2 qator)
+    _draw_cell(draw, 0, 0, W, H_TITLE, bg=GREEN_HEADER)
+    _draw_centered_text(draw, "TEZ TUGAYDIGAN MAHSULOTLAR", 0, 18, W, 58, f_title, WHITE)
+    sub = f"≤ {max_days} kunlik qoldiq   ·   jami {total} ta   ·   yangilangan: {last_updated or '—'}"
+    _draw_centered_text(draw, sub, 0, 88, W, 46, f_sub, (212, 226, 212))
+
+    # Header qatori
+    y = H_TITLE
+    for label, w, x0 in [("Tovar nomi", C_NAME, 0), ("Qoldiq", C_QOLDIQ, C_NAME),
+                         ("Necha kun", C_KUN, C_NAME + C_QOLDIQ),
+                         ("Holat", C_HOLAT, C_NAME + C_QOLDIQ + C_KUN)]:
+        _draw_cell(draw, x0, y, w, H_HEADER, bg=GREEN_HEADER)
+        _draw_centered_text(draw, label, x0, y, w, H_HEADER, f_h, WHITE)
+    y += H_HEADER
+
+    # Qatorlar
+    for lines, it, rh in prepared:
+        days = it["days"]
+        if days < 2:
+            row_bg, chip_bg, chip_tx, chip_lbl, kun_col = LOW_RED_ROW, LOW_RED_CHIP, WHITE, "Qizil", LOW_RED_KUN
+        else:
+            row_bg, chip_bg, chip_tx, chip_lbl, kun_col = LOW_YELLOW_ROW, LOW_YELLOW_CHIP, TEXT_DARK, "Sariq", TEXT_DARK
+
+        # Tovar nomi (1-2 satr, vertikal markaz)
+        _draw_cell(draw, 0, y, C_NAME, rh, bg=row_bg)
+        ty = y + (rh - len(lines) * LINE_H) // 2
+        for ln in lines:
+            draw.text((PAD_NAME, ty), ln, font=f_name, fill=TEXT_DARK)
+            ty += LINE_H
+        # Qoldiq
+        x = C_NAME
+        _draw_cell(draw, x, y, C_QOLDIQ, rh, bg=row_bg)
+        _draw_centered_text(draw, f"{_fmt_int(it['stock'])} blok", x, y, C_QOLDIQ, rh, f_cell, TEXT_DARK)
+        # Necha kun
+        x += C_QOLDIQ
+        _draw_cell(draw, x, y, C_KUN, rh, bg=row_bg)
+        _draw_centered_text(draw, f"{int(round(days))} kun", x, y, C_KUN, rh, f_cell, kun_col)
+        # Holat (rangli chip + yozuv)
+        x += C_KUN
+        _draw_cell(draw, x, y, C_HOLAT, rh, bg=chip_bg)
+        _draw_centered_text(draw, chip_lbl, x, y, C_HOLAT, rh, f_cell, chip_tx)
+        y += rh
+
+    # Footer (agar ro'yxat cheklangan bo'lsa)
+    if total > len(items):
+        note = f"Eng kritik {len(items)} tasi ko'rsatildi (jami {total} ta)."
+        draw.text((24, y + 16), note, font=f_sub, fill=(120, 110, 80))
+
+    buf = BytesIO()
+    img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def render_low_stock_table(max_days: int = 5) -> Optional[bytes]:
+    """«🔴 Tez tugaydiganlar» tugmasi uchun PNG jadval.
+    Ma'lumot yo'q bo'lsa None qaytaradi (bot matn/«yo'q» ko'rsatadi)."""
+    computed = _compute_low_stock_items(max_days)
+    if not computed:
+        return None
+    items, last_updated = computed
+    return _draw_low_stock_image(items, last_updated, max_days)

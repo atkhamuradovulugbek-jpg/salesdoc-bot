@@ -309,21 +309,45 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     if data == "menu:low_stock":
-        messages = reports.low_stock_report(max_days=5)
-        await query.message.edit_text(
-            _truncate(messages[0]), parse_mode=ParseMode.HTML,
+        back_kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◀️ Bosh menyu", callback_data="back:main")]]
         )
+        if _IMAGE_REPORTS_OK:
+            try:
+                # Rasm chizish CPU-bog'liq — event-loop'ni bloklamaslik uchun threadda
+                png = await asyncio.to_thread(image_reports.render_low_stock_table, 5)
+                if png:
+                    await query.message.reply_photo(
+                        photo=png,
+                        caption="🔴 <b>Tez tugaydigan mahsulotlar</b> (≤ 5 kun)",
+                        parse_mode=ParseMode.HTML, reply_markup=back_kb,
+                    )
+                    try:
+                        await query.message.edit_text(
+                            "🔴 <b>Tez tugaydigan mahsulotlar</b> — rasmda 👇",
+                            parse_mode=ParseMode.HTML,
+                        )
+                    except Exception:
+                        pass
+                else:
+                    await query.message.edit_text(
+                        "🔴 <b>TEZ TUGAYDIGAN MAHSULOTLAR</b>\n\n✅ ≤ 5 kunlik mahsulot yo'q.",
+                        parse_mode=ParseMode.HTML, reply_markup=back_kb,
+                    )
+                return
+            except Exception:
+                logger.exception("Tez tugaydiganlar rasmi chizilmadi — matnga fallback")
+        # MATN fallback (Pillow yo'q yoki rasm xatosi)
+        messages = reports.low_stock_report(max_days=5)
+        await query.message.edit_text(_truncate(messages[0]), parse_mode=ParseMode.HTML)
         for msg in messages[1:-1]:
             await query.message.reply_text(_truncate(msg), parse_mode=ParseMode.HTML)
         if len(messages) > 1:
             await query.message.reply_text(
-                _truncate(messages[-1]), parse_mode=ParseMode.HTML,
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Bosh menyu", callback_data="back:main")]]),
+                _truncate(messages[-1]), parse_mode=ParseMode.HTML, reply_markup=back_kb,
             )
         else:
-            await query.message.edit_reply_markup(
-                InlineKeyboardMarkup([[InlineKeyboardButton("◀️ Orqaga", callback_data="back:main")]])
-            )
+            await query.message.edit_reply_markup(reply_markup=back_kb)
         return
 
     if data == "menu:stock":
