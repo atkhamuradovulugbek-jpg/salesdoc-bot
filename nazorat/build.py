@@ -94,7 +94,7 @@ class DayContext:
 
         debt_limit = ag.debt_limit or self.rules.debt_limit[s.league]
         return {
-            "name": ag.name.split()[0] if " " in ag.name else ag.name,
+            "name": ag.short,
             "league_label": "Shahar ligasi" if s.league == "city" else "Viloyat ligasi",
             "date_label": f"{self.today.day}-{MONTHS_UZ[self.today.month].upper()}",
             "returns": returns, "returns_total": returns_total, "ball_note": ball_note,
