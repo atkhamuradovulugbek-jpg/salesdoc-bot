@@ -643,26 +643,38 @@ def render_debt_card(x: dict) -> bytes:
 def render_returns_card(x: dict) -> bytes:
     c = Card()
     c.header("vazvrat hisoboti", x["date_label"], x["name"], x["league_label"])
-    # Aniq sana bilan sarlavha
     rdate = x.get("returns_date", "")
-    c.section(f"{rdate} kungi vazvratlar" if rdate else "Kechagi vazvratlar", icon="return")
-    if x["returns"]:
-        for i, (shop, summa) in enumerate(x["returns"], 1):
+    full = x.get("full_returns", [])
+    partial = x.get("partial_returns", [])
+
+    # 1) TO'LIQ vazvrat — do'kon butun buyurtmani rad etgan
+    c.section(f"{rdate} · to'liq rad etilgan" if rdate else "To'liq rad etilgan", icon="return")
+    if full:
+        for i, (shop, summa) in enumerate(full, 1):
             c.numbered_row(i, shop, f"−{fmt(summa)}", amount_color=RED)
-        # Kunlik jami — ALOHIDA katak (do'kon ro'yxatidan ajralib tursin)
-        c.gap(6)
+    else:
+        c.row("To'liq vazvrat", "yo'q", value_color=GREEN, divider=False)
+
+    # 2) QISMAN vazvrat — buyurtmadan ba'zi tovar olinmagan
+    c.section("Qisman olinmagan tovarlar", icon="debt")
+    if partial:
+        for i, (shop, summa) in enumerate(partial, 1):
+            c.numbered_row(i, shop, f"−{fmt(summa)}", amount_color=RED)
+    else:
+        c.row("Qisman vazvrat", "yo'q", value_color=GREEN, divider=False)
+
+    # Kunlik jami — ALOHIDA katak
+    if x.get("returns_total", 0) > 0:
+        c.gap(4)
         _big_tile(c, f"{rdate} kungi jami vazvrat", f"−{fmt(x['returns_total'])} so'm",
                   RED, icon_name="return")
-    else:
-        c.row("Bu kuni vazvrat", "yo'q", value_color=GREEN, divider=False)
 
     # Oylik jami — ALOHIDA katak
     mcol = GREEN if x.get("returns_month_pct", 0) < 3 else RED
     _big_tile(c, "Shu oy bo'yicha jami vazvrat", f"{fmt(x.get('returns_month', 0))} so'm",
               mcol, sub=f"{x.get('returns_month_pct', 0):.1f}%", icon_name="calendar")
-    if x.get("ball_note"):
-        c.callout(x["ball_note"], "warn", label="BALL O'ZGARDI", icon="debt")
-    c.footer("Vazvrat o'sha kun savdosidan ayiriladi — ball qayta hisoblanadi.")
+    c.footer("To'liq: do'kon butun buyurtmani olmagan. Qisman: buyurtmadan ba'zi tovar olinmagan. "
+             "Ikkalasi ham savdodan chiqarilgan — ball shunga qarab hisoblanadi.")
     return c.png()
 
 

@@ -137,7 +137,11 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
             clients = await api.get_clients();    logger.info("✓ clients: %d", len(clients))
 
         await progress(f"💰 Buyurtmalar tortilmoqda...")
-        orders = await api.get_orders(lookback_from, today); logger.info("✓ orders: %d", len(orders))
+        # status 1,2,3 = savdo; 4 = to'liq vazvrat (asosiy bot doim status IN (1,2,3)
+        # filtrlaydi, shuning uchun status 4 uni buzmaydi; nazorat boti vazvrat
+        # hisobotida ishlatadi).
+        orders = await api.get_orders(lookback_from, today, statuses=[1, 2, 3, 4])
+        logger.info("✓ orders: %d", len(orders))
 
         await progress(f"💾 Bazaga yozilmoqda...")
 

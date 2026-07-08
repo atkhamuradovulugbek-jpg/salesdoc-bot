@@ -4,8 +4,10 @@
 timezone: Asia/Tashkent
 sunday_off: true              # yakshanba dam (26 kun/oy standarti)
 
-# Buyurtma statuslari: yaroqli savdo deb hisoblanadiganlar
+# Buyurtma statuslari: yaroqli savdo deb hisoblanadiganlar (1=yangi, 2=jarayonda, 3=yetkazilgan)
 statuses_ok: [1, 2, 3]
+# To'liq vazvrat statusi (do'kon butun buyurtmani rad etgan) — savdoga sanalmaydi
+status_full_return: 4
 
 # Kunlik reja (so'm) — liga bo'yicha
 daily_plan:
@@ -21,9 +23,11 @@ ball_scale:
   - {min_pct: 80,  ball: 1}
   - {min_pct: 0,   ball: 0}
 
-# Vazvrat qoidasi: tovar qaytsa, o'sha KUN savdosidan ayiriladi va kun balli
-# qayta hisoblanadi (net). 2026-iyuldan amal qiladi.
-returns_reduce_ball: true
+# Vazvrat qoidasi. MUHIM: SalesDoctor savdo summasi (totalSummaAfterDiscount) ALLAQACHON
+# SOF (Сумма после) — qisman vazvrat undan avtomatik ayirilgan, to'liq vazvrat esa
+# status 4 bo'lib savdodan tashqarida. Shuning uchun ballni yana AYIRISH shart emas
+# (aks holda ikki marta ayiriladi). Ball to'g'ridan-to'g'ri sof savdodan hisoblanadi.
+returns_reduce_ball: false
 
 # Oylik savdo plani (so'm) — KPI uchun
 monthly_sales_plan:

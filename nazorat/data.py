@@ -82,7 +82,7 @@ def agent_debt_total(conn, sd_id: str) -> float:
 
 def agent_returns_by_shop(conn, sd_id: str, day: str,
                           statuses: list[int]) -> list[tuple[str, float]]:
-    """Berilgan kundagi vazvratlar do'kon bo'yicha (ertalabki karta uchun)."""
+    """Berilgan kundagi QISMAN vazvratlar do'kon bo'yicha (status 1,2,3, total_returns>0)."""
     ph = ",".join("?" * len(statuses))
     rows = conn.execute(f"""
         SELECT c.name AS shop, SUM(o.total_returns) AS ret
@@ -91,6 +91,33 @@ def agent_returns_by_shop(conn, sd_id: str, day: str,
         GROUP BY o.client_sd_id ORDER BY ret DESC
     """, (sd_id, day, *statuses)).fetchall()
     return [(r["shop"] or "Do'kon", float(r["ret"] or 0)) for r in rows]
+
+
+def agent_full_returns_by_shop(conn, sd_id: str, day: str,
+                               full_status: int) -> list[tuple[str, float]]:
+    """Berilgan kundagi TO'LIQ vazvratlar do'kon bo'yicha (status 4)."""
+    rows = conn.execute("""
+        SELECT c.name AS shop, SUM(o.total_returns) AS ret
+        FROM orders o LEFT JOIN clients c ON c.sd_id = o.client_sd_id
+        WHERE o.agent_sd_id=? AND o.date=? AND o.status=? AND o.total_returns>0
+        GROUP BY o.client_sd_id ORDER BY ret DESC
+    """, (sd_id, day, full_status)).fetchall()
+    return [(r["shop"] or "Do'kon", float(r["ret"] or 0)) for r in rows]
+
+
+def agent_returns_month(conn, sd_id: str, dfrom: str, dto: str,
+                        statuses: list[int], full_status: int) -> tuple[float, float]:
+    """Oylik vazvrat: (qisman_jami, to'liq_jami)."""
+    ph = ",".join("?" * len(statuses))
+    partial = conn.execute(f"""
+        SELECT COALESCE(SUM(total_returns),0) v FROM orders
+        WHERE agent_sd_id=? AND date>=? AND date<=? AND status IN ({ph}) AND total_returns>0
+    """, (sd_id, dfrom, dto, *statuses)).fetchone()["v"]
+    full = conn.execute("""
+        SELECT COALESCE(SUM(total_returns),0) v FROM orders
+        WHERE agent_sd_id=? AND date>=? AND date<=? AND status=?
+    """, (sd_id, dfrom, dto, full_status)).fetchone()["v"]
+    return float(partial or 0), float(full or 0)
 
 
 # ------------------------------------------------------------------

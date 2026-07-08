@@ -57,6 +57,7 @@ class Rules(BaseModel):
     timezone: str = "Asia/Tashkent"
     sunday_off: bool = True
     statuses_ok: list[int] = Field(default_factory=lambda: [1, 2, 3])
+    status_full_return: int = 4
     daily_plan: dict[str, float]            # league -> so'm
     ball_scale: list[BallStep]
     returns_reduce_ball: bool = True

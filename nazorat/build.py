@@ -13,8 +13,8 @@ from . import storage
 from .core.growth import GrowthEntry, growth_winner
 from .core.podium import PodiumEntry, daily_rating, rank_podium
 from .core.rules import Rules, load_agents, load_rules
-from .data import (AgentSnapshot, MONTHS_UZ, agent_debt, agent_month_net_sales,
-                   agent_returns_by_shop)
+from .data import (AgentSnapshot, MONTHS_UZ, agent_debt, agent_full_returns_by_shop,
+                   agent_month_net_sales, agent_returns_by_shop, agent_returns_month)
 
 
 def prev_month(today: date) -> tuple[int, int]:
@@ -75,39 +75,39 @@ class DayContext:
         yesterday = yesterday_d.isoformat()
         returns_date = yesterday_d.strftime("%d.%m.%Y")   # 03.07.2026
         st = self.rules.statuses_ok
+        fs = self.rules.status_full_return
+        dfrom = self.month_first_iso()
         with get_conn() as conn:
-            returns = agent_returns_by_shop(conn, sd_id, yesterday, st)
+            partial = agent_returns_by_shop(conn, sd_id, yesterday, st)      # qisman
+            full = agent_full_returns_by_shop(conn, sd_id, yesterday, fs)    # to'liq
+            m_partial, m_full = agent_returns_month(conn, sd_id, dfrom, self.today.isoformat(), st, fs)
             # 50 000 so'mdan yuqori BARCHA do'konlar (raqamli to'liq ro'yxat)
             debt_total, debts = agent_debt(conn, sd_id, self.today.isoformat(),
                                            min_debt=50_000, limit=200)
-        returns_total = sum(r[1] for r in returns)
-
-        # Vazvrat ballni o'zgartirganmi? (kechagi kun ballini net/brutto solishtir)
-        ball_note = None
-        if self.rules.returns_reduce_ball and returns_total > 0:
-            from .core.balls import daily_ball
-            dp = self.rules.daily_plan[s.league]
-            y_date = self.today - timedelta(days=1)
-            y_sales = s.day_sales.get(y_date, 0.0)
-            b_gross = daily_ball(y_sales, dp, self.rules.ball_scale)
-            b_net = daily_ball(max(y_sales - returns_total, 0), dp, self.rules.ball_scale)
-            if b_net < b_gross:
-                ball_note = (f"{y_date.day}-{MONTHS_UZ[y_date.month]} balling qayta hisoblandi: "
-                             f"{b_gross} » {b_net} ball "
-                             f"(kun savdosidan {returns_total:,.0f} ayirildi)".replace(",", " "))
+        partial_total = sum(r[1] for r in partial)
+        full_total = sum(r[1] for r in full)
+        day_total = partial_total + full_total
+        month_total = m_partial + m_full
 
         debt_limit = ag.debt_limit or self.rules.debt_limit[s.league]
-        returns_month_pct = (s.month_returns / s.month_sales * 100) if s.month_sales else 0
+        returns_month_pct = (month_total / s.month_sales * 100) if s.month_sales else 0
         return {
             "name": ag.short,
             "league_label": "Shahar ligasi" if s.league == "city" else "Viloyat ligasi",
             "date_label": f"{self.today.day}-{MONTHS_UZ[self.today.month].upper()}",
-            "returns": returns, "returns_total": returns_total, "ball_note": ball_note,
             "returns_date": returns_date,
-            "returns_month": s.month_returns, "returns_month_pct": returns_month_pct,
+            "full_returns": full, "full_total": full_total,       # to'liq (status 4)
+            "partial_returns": partial, "partial_total": partial_total,  # qisman (status 3)
+            "returns_total": day_total,                            # kunlik jami
+            "returns_month": month_total, "returns_month_pct": returns_month_pct,
+            "returns_month_full": m_full, "returns_month_partial": m_partial,
+            "ball_note": None,
             "debts": debts, "debts_all": debts, "debt_total": debt_total,
             "debt_limit": debt_limit,
         }
+
+    def month_first_iso(self) -> str:
+        return self.today.replace(day=1).isoformat()
 
     # ---------- guruh ----------
 
