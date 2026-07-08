@@ -42,8 +42,8 @@ GOLD = (255, 205, 84)        # faqat oy yakuni medallari
 
 
 def status_color(pct: float) -> tuple:
-    """Svetofor: >=100 yashil, 50-99 sariq, <50 qizil."""
-    return GREEN if pct >= 100 else (AMBER if pct >= 50 else RED)
+    """Svetofor (foydalanuvchi qoidasi): >=90 yashil, 70-89 sariq, <70 qizil."""
+    return GREEN if pct >= 90 else (AMBER if pct >= 70 else RED)
 
 
 def _mix(a, b, t):
