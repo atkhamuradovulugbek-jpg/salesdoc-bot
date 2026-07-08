@@ -398,28 +398,38 @@ def render_ball_card(x: dict) -> bytes:
     c.d.text((W - PAD - 40 - 82, c.y + 74), "ball", font=_font(40, bold=True), fill=PINK_SOFT)
     c.y += h + 16
 
-    # Bugungi O'RIN (savdodan) + kechagiga nisbatan o'zgarish
+    # Bugungi O'RIN (savdodan) — katta, o'ngda o'rin
     tr, yr = x.get("today_rank"), x.get("yesterday_rank")
     if tr:
-        h_r = 88
+        h_r = 92
         c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h_r], 16, fill=TILE)
-        icons.draw(c.d, "trophy", PAD + 34, c.y + h_r // 2, 15, PINK_SOFT, 3)
-        c.d.text((PAD + 72, c.y + 20), "BUGUNGI SAVDO BO'YICHA O'RNINGIZ", font=_font(18, bold=True), fill=MUTED)
-        c.d.text((PAD + 72, c.y + 44), f"{tr}-o'rin", font=_font(34, bold=True), fill=WHITE)
-        ow = c.d.textlength(f"{tr}-o'rin", font=_font(34, bold=True))
-        c.d.text((PAD + 72 + ow + 14, c.y + 52), f"/ {x.get('league_size','')} agent", font=_font(22), fill=SUB)
-        # o'zgarish
+        icons.draw(c.d, "trophy", PAD + 34, c.y + h_r // 2, 16, PINK_SOFT, 3)
+        c.d.text((PAD + 72, c.y + 24), "BUGUNGI SAVDO BO'YICHA O'RNINGIZ", font=_font(19, bold=True), fill=MUTED)
+        c.d.text((PAD + 72, c.y + 48), "agentlar orasida", font=_font(22), fill=SUB)
+        rank_txt = f"{tr}"
+        fr = _font(52, bold=True)
+        rw = c.d.textlength(rank_txt, font=fr)
+        c.d.text((W - PAD - 34 - rw - 130, c.y + 24), rank_txt, font=fr, fill=PINK)
+        c.d.text((W - PAD - 34 - 118, c.y + 40), f"-o'rin", font=_font(30, bold=True), fill=PINK_SOFT)
+        c.d.text((W - PAD - 34 - 118, c.y + 72), f"/ {x.get('league_size','')} agent", font=_font(20), fill=MUTED)
+        c.y += h_r + 12
+
+        # O'ZGARISH — KATTA ta'sirchan banner (bosim uchun)
         if yr:
-            diff = yr - tr   # musbat = ko'tarildi
+            diff = yr - tr
             if diff > 0:
-                txt, col, ic = f"↑ kecha {yr}-o'rin edingiz, {diff} pog'ona ko'tarildingiz!", GREEN, "sales"
+                msg = (f"Kecha {yr}-o'rin edingiz, bugun {tr}-o'ringa ko'tarildingiz — "
+                       f"{diff} pog'ona yuqori! Zo'r, shu zayilda davom eting.")
+                c.callout(msg, "green", label="AJOYIB KO'TARILISH", icon="sales")
             elif diff < 0:
-                txt, col, ic = f"↓ kecha {yr}-o'rin edingiz, {abs(diff)} pog'ona tushdingiz", RED, "sales_down"
+                msg = (f"Kecha {yr}-o'rin edingiz, bugun {tr}-o'rindasiz — "
+                       f"{abs(diff)} pog'ona tushdingiz! Bunga befarq bo'lmang, "
+                       f"ertaga o'rningizni qaytaring.")
+                c.callout(msg, "red", label="DIQQAT — O'RIN TUSHDI", icon="sales_down")
             else:
-                txt, col, ic = f"kecha ham {yr}-o'rin edingiz", SUB, "target"
-            tw = c.d.textlength(_san(txt), font=_font(20, bold=True))
-            c.d.text((W - PAD - 34 - tw, c.y + 34), _san(txt), font=_font(20, bold=True), fill=col)
-        c.y += h_r + 16
+                msg = (f"Kecha ham {yr}-o'rinda edingiz. Bugun bir pog'ona bo'lsa ham "
+                       f"yuqoriga ko'tarilishga harakat qiling!")
+                c.callout(msg, "warn", label="O'RIN O'ZGARMADI", icon="target")
 
     # OY NATIJASI: oylik reja aniq ko'rinadi
     if not x.get("observe_only") and x["ball_plan"]:
