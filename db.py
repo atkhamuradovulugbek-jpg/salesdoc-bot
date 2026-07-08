@@ -21,6 +21,9 @@ def get_conn() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
+    # Ikki jarayon (asosiy bot + nazorat bot) bitta bazani ishlatadi —
+    # qulf kutish vaqti, aks holda "database is locked" xatosi chiqadi.
+    conn.execute("PRAGMA busy_timeout=30000")
     return conn
 
 
@@ -59,7 +62,8 @@ def init_db() -> None:
                 status                  INTEGER,
                 agent_sd_id             TEXT,
                 client_sd_id            TEXT,
-                total_after_discount    REAL DEFAULT 0
+                total_after_discount    REAL DEFAULT 0,
+                total_returns           REAL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS order_items (
@@ -68,7 +72,9 @@ def init_db() -> None:
                 product_sd_id   TEXT,
                 product_name    TEXT,
                 quantity        REAL DEFAULT 0,
-                summa           REAL DEFAULT 0
+                summa           REAL DEFAULT 0,
+                returned        REAL DEFAULT 0,
+                block           REAL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS balances (
@@ -129,6 +135,16 @@ def init_db() -> None:
                 updated_at    TEXT
             );
         """)
+        # Migratsiya: eski bazalarga yangi ustunlar (bor bo'lsa e'tiborsiz)
+        for stmt in (
+            "ALTER TABLE order_items ADD COLUMN returned REAL DEFAULT 0",
+            "ALTER TABLE order_items ADD COLUMN block REAL DEFAULT 0",
+            "ALTER TABLE orders ADD COLUMN total_returns REAL DEFAULT 0",
+        ):
+            try:
+                conn.execute(stmt)
+            except sqlite3.OperationalError:
+                pass  # ustun allaqachon bor
 
 
 def upsert_agent(conn: sqlite3.Connection, sd_id: str, code_1c: str, name: str, active: str, updated_at: str) -> None:
@@ -170,30 +186,36 @@ def upsert_client(conn: sqlite3.Connection, sd_id: str, code_1c: str, name: str,
 
 
 def upsert_order(conn: sqlite3.Connection, sd_id: str, date: str, status: int,
-                 agent_sd_id: str, client_sd_id: str, total: float) -> None:
+                 agent_sd_id: str, client_sd_id: str, total: float,
+                 total_returns: float = 0) -> None:
     conn.execute("""
-        INSERT INTO orders (sd_id, date, status, agent_sd_id, client_sd_id, total_after_discount)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO orders (sd_id, date, status, agent_sd_id, client_sd_id,
+                            total_after_discount, total_returns)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(sd_id) DO UPDATE SET
             date=excluded.date,
             status=excluded.status,
             agent_sd_id=excluded.agent_sd_id,
             client_sd_id=excluded.client_sd_id,
-            total_after_discount=excluded.total_after_discount
-    """, (sd_id, date, status, agent_sd_id, client_sd_id, total))
+            total_after_discount=excluded.total_after_discount,
+            total_returns=excluded.total_returns
+    """, (sd_id, date, status, agent_sd_id, client_sd_id, total, total_returns))
 
 
 def replace_order_items(conn: sqlite3.Connection, order_sd_id: str, items: list[dict]) -> None:
     conn.execute("DELETE FROM order_items WHERE order_sd_id=?", (order_sd_id,))
     conn.executemany("""
-        INSERT INTO order_items (order_sd_id, product_sd_id, product_name, quantity, summa)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO order_items (order_sd_id, product_sd_id, product_name, quantity, summa,
+                                 returned, block)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     """, [
         (order_sd_id,
          i.get("product_sd_id", ""),
          i.get("product_name", ""),
          i.get("quantity", 0),
-         i.get("summa", 0))
+         i.get("summa", 0),
+         i.get("returned", 0),
+         i.get("block", 0))
         for i in items
     ])
 

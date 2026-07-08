@@ -237,6 +237,7 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
                 sd_id, order_date, _to_int(o.get("status")),
                 _nested_id(o.get("agent")), _nested_id(o.get("client")),
                 _to_float(o.get("totalSummaAfterDiscount")),
+                _to_float(o.get("totalReturnsSumma")),
             ))
             order_sd_ids.append(sd_id)
             for item in (o.get("orderProducts") or []):
@@ -249,6 +250,8 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
                     _safe_str(prod.get("name")) if isinstance(prod, dict) else "",
                     _to_float(item.get("quantity")),
                     _to_float(item.get("summa")),
+                    _to_float(item.get("returned")),
+                    _to_float(item.get("block")),
                 ))
 
         # Balances
@@ -371,18 +374,21 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
             # Yangi orderlarni yozish — upsert (bor bo'lsa yangilanadi).
             # Oraliqdan tashqaridagi eski order qayta kelsa UNIQUE xatosi bermaydi.
             conn.executemany("""
-                INSERT INTO orders (sd_id, date, status, agent_sd_id, client_sd_id, total_after_discount)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO orders (sd_id, date, status, agent_sd_id, client_sd_id,
+                                    total_after_discount, total_returns)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(sd_id) DO UPDATE SET
                     date=excluded.date, status=excluded.status,
                     agent_sd_id=excluded.agent_sd_id, client_sd_id=excluded.client_sd_id,
-                    total_after_discount=excluded.total_after_discount
+                    total_after_discount=excluded.total_after_discount,
+                    total_returns=excluded.total_returns
             """, order_rows)
 
             if item_rows:
                 conn.executemany("""
-                    INSERT INTO order_items (order_sd_id, product_sd_id, product_name, quantity, summa)
-                    VALUES (?, ?, ?, ?, ?)
+                    INSERT INTO order_items (order_sd_id, product_sd_id, product_name,
+                                             quantity, summa, returned, block)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
                 """, item_rows)
 
             conn.executemany("""
