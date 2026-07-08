@@ -71,7 +71,9 @@ class DayContext:
         """Ertalabki qarz/vazvrat kartasi (kechagi vazvrat + qarz ro'yxati)."""
         s = self.snap[sd_id]
         ag = s.agent
-        yesterday = (self.today - timedelta(days=1)).isoformat()
+        yesterday_d = self.today - timedelta(days=1)
+        yesterday = yesterday_d.isoformat()
+        returns_date = yesterday_d.strftime("%d.%m.%Y")   # 03.07.2026
         st = self.rules.statuses_ok
         with get_conn() as conn:
             returns = agent_returns_by_shop(conn, sd_id, yesterday, st)
@@ -101,6 +103,7 @@ class DayContext:
             "league_label": "Shahar ligasi" if s.league == "city" else "Viloyat ligasi",
             "date_label": f"{self.today.day}-{MONTHS_UZ[self.today.month].upper()}",
             "returns": returns, "returns_total": returns_total, "ball_note": ball_note,
+            "returns_date": returns_date,
             "returns_month": s.month_returns, "returns_month_pct": returns_month_pct,
             "debts": debts, "debts_all": debts, "debt_total": debt_total,
             "debt_limit": debt_limit,

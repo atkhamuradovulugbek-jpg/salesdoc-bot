@@ -460,33 +460,53 @@ def _plan_tile(c, label, value, accent, sub="", frac=None):
     c.y += h + 12
 
 
+def _big_tile(c, label, value, accent, sub="", icon_name="target"):
+    """Katta urg'uli katak: ikonka + label + KATTA qiymat (+ o'ngda sub)."""
+    h = 108
+    c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h], 16, fill=TILE2)
+    icons.draw(c.d, icon_name, PAD + 40, c.y + h // 2, 19, accent, 3)
+    c.d.text((PAD + 82, c.y + 24), label.upper(), font=_font(20, bold=True), fill=MUTED)
+    c.d.text((PAD + 82, c.y + 52), value, font=_font(40, bold=True), fill=accent)
+    if sub:
+        sw = c.d.textlength(sub, font=_font(32, bold=True))
+        c.d.text((W - PAD - 34 - sw, c.y + 46), sub, font=_font(32, bold=True), fill=accent)
+    c.y += h + 12
+
+
 def render_plan_card(x: dict) -> bytes:
     c = Card()
-    c.header("oylik reja", x["date_label"], x["name"],
-             f"{x['month_label']} · {x['wd_passed']}-kun / {x['wd_total']} · {x['wd_remaining']} kun qoldi")
+    c.header("oylik reja", x["date_label"], x["name"], x["month_label"] + " oyi")
+    # Ish kunlari — aniq 3 qismli rangli strip
+    c.gap(2)
+    seg_w = (W - 2 * PAD - 24) / 3
+    segs = [("ISH KUNI", x["wd_total"], SUB),
+            ("ISHLAB BO'LINDI", x["wd_passed"], PINK_SOFT),
+            ("QOLDI", x["wd_remaining"], GREEN)]
+    for i, (lab, val, col) in enumerate(segs):
+        sx = PAD + i * (seg_w + 12)
+        c.d.rounded_rectangle([sx, c.y, sx + seg_w, c.y + 66], 12, fill=TILE)
+        c.d.text((sx + 20, c.y + 12), lab, font=_font(16, bold=True), fill=MUTED)
+        c.d.text((sx + 20, c.y + 32), f"{val} kun", font=_font(26, bold=True), fill=col)
+    c.y += 66 + 18
 
-    # 3 ajratilgan katak: reja → bajardingiz → yana kerak
+    # Savdo rejasi — reja / bajardingiz / qoldi
     _plan_tile(c, "Oylik rejangiz", f"{fmt(x['sales_plan'])} so'm", SUB)
     _plan_tile(c, "Bajardingiz", f"{fmt(x['sales_done'])} so'm", PINK,
                sub=f"{x['plan_pct']:.0f}%", frac=x["plan_pct"] / 100)
     _plan_tile(c, "Yana bajarishingiz kerak", f"{fmt(x['plan_remaining'])} so'm", GREEN)
 
-    # Kalit raqam — kuniga kerak (urg'uli plitka + bugungi savdo)
-    c.gap(4)
-    h = 132
-    c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h], 16, fill=TILE2)
-    icons.draw(c.d, "target", PAD + 40, c.y + 52, 20, PINK_SOFT, 3)
-    c.d.text((PAD + 82, c.y + 24), "HAR KUNI QILISHINGIZ KERAK", font=_font(20, bold=True), fill=MUTED)
-    c.d.text((PAD + 82, c.y + 50), f"{fmt(x['daily_required'])} so'm", font=_font(38, bold=True), fill=PINK)
-    # pastki chiziq: bugun bajardingiz
-    c.d.line([(PAD + 30, c.y + 98), (W - PAD - 30, c.y + 98)], fill=HAIR, width=1)
+    # OYLIK PROGNOZ — shu ketishda oyni qancha bilan yopadi (alohida, ajralib)
+    pcol = GREEN if x["prognoz_pct"] >= 100 else (WHITE if x["prognoz_pct"] >= 80 else RED)
+    _big_tile(c, "Oylik prognoz (shu ketishda)", f"{fmt(x['prognoz'])} so'm", pcol,
+              sub=f"{x['prognoz_pct']:.0f}%", icon_name="growth")
+
+    # HAR KUNI KERAK + BUGUN BAJARDINGIZ — ikkalasi ham KATTA, teng
+    _big_tile(c, "Har kuni qilishingiz kerak", f"{fmt(x['daily_required'])} so'm", PINK,
+              icon_name="target")
     tp = x["today_pct"]
     tcol = GREEN if tp >= 100 else (WHITE if tp >= 50 else RED)
-    c.d.text((PAD + 34, c.y + 106), "Bugun bajardingiz:", font=_font(22), fill=SUB)
-    tv = f"{fmt(x['today_sales'])} so'm · {tp:.0f}%"
-    tw = c.d.textlength(tv, font=_font(23, bold=True))
-    c.d.text((W - PAD - 34 - tw, c.y + 105), tv, font=_font(23, bold=True), fill=tcol)
-    c.y += h + 18
+    _big_tile(c, "Bugun bajardingiz", f"{fmt(x['today_sales'])} so'm", tcol,
+              sub=f"{tp:.0f}%", icon_name="sales")
 
     c.section("Vizitlar", icon="calendar")
     c.row("Oylik vizit rejasi", f"{x['visit_plan']} ta")
@@ -494,8 +514,6 @@ def render_plan_card(x: dict) -> bytes:
     vok = x["today_visits"] >= x["visit_daily_required"]
     c.row("Kuniga kerak", f"{x['visit_daily_required']:.0f} ta  (bugun {x['today_visits']} ta)",
           value_color=(GREEN if vok else WHITE), divider=False)
-
-    c.callout(x["status_text"], x.get("status_scheme", "ok"), label="", icon=None)
     return c.png()
 
 
@@ -625,19 +643,23 @@ def render_debt_card(x: dict) -> bytes:
 def render_returns_card(x: dict) -> bytes:
     c = Card()
     c.header("vazvrat hisoboti", x["date_label"], x["name"], x["league_label"])
-    c.section("Kecha qaytgan tovarlar", icon="return")
+    # Aniq sana bilan sarlavha
+    rdate = x.get("returns_date", "")
+    c.section(f"{rdate} kungi vazvratlar" if rdate else "Kechagi vazvratlar", icon="return")
     if x["returns"]:
         for i, (shop, summa) in enumerate(x["returns"], 1):
             c.numbered_row(i, shop, f"−{fmt(summa)}", amount_color=RED)
-        c.row("Kecha jami vazvrat", f"−{fmt(x['returns_total'])}", value_color=RED, divider=False)
+        # Kunlik jami — ALOHIDA katak (do'kon ro'yxatidan ajralib tursin)
+        c.gap(6)
+        _big_tile(c, f"{rdate} kungi jami vazvrat", f"−{fmt(x['returns_total'])} so'm",
+                  RED, icon_name="return")
     else:
-        c.row("Kecha vazvrat", "yo'q", value_color=GREEN, divider=False)
+        c.row("Bu kuni vazvrat", "yo'q", value_color=GREEN, divider=False)
 
-    c.section("Shu oy bo'yicha", icon="calendar")
+    # Oylik jami — ALOHIDA katak
     mcol = GREEN if x.get("returns_month_pct", 0) < 3 else RED
-    c.row("Oylik jami vazvrat", f"{fmt(x.get('returns_month', 0))} so'm", value_color=WHITE)
-    c.row("Savdoga nisbatan", f"{x.get('returns_month_pct', 0):.1f}%",
-          value_color=mcol, divider=False)
+    _big_tile(c, "Shu oy bo'yicha jami vazvrat", f"{fmt(x.get('returns_month', 0))} so'm",
+              mcol, sub=f"{x.get('returns_month_pct', 0):.1f}%", icon_name="calendar")
     if x.get("ball_note"):
         c.callout(x["ball_note"], "warn", label="BALL O'ZGARDI", icon="debt")
     c.footer("Vazvrat o'sha kun savdosidan ayiriladi — ball qayta hisoblanadi.")
