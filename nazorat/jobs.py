@@ -16,8 +16,9 @@ from db import get_conn
 
 from . import storage
 from .build import DayContext
-from .cards import (render_admin_summary, render_evening_card, render_group_daily,
-                    render_morning_card, render_plan_card, render_toy_card)
+from .cards import (render_admin_summary, render_ball_card, render_debt_card,
+                    render_group_daily, render_plan_card, render_returns_card,
+                    render_toy_card)
 from .core.balls import zero_streak
 from .nz_config import ADMIN_IDS, DRY_RUN, GROUP_CITY_CHAT_ID, GROUP_REGION_CHAT_ID
 
@@ -87,11 +88,14 @@ async def morning_job(app: Application):
         if ag.observe_only:
             continue
         card = dc.morning_card(ag.sd_id)
-        # Faqat qarz yoki vazvrat bo'lsa yuboramiz
-        if card["returns_total"] <= 0 and card["debt_total"] <= 0:
+        photos = []
+        if card["debt_total"] > 0:
+            photos.append(render_debt_card(card))       # 1-jadval: qarz
+        if card["returns_total"] > 0:
+            photos.append(render_returns_card(card))    # 2-jadval: vazvrat
+        if not photos:
             continue
-        png = render_morning_card(card)
-        await _send_agent(app, ag.sd_id, [png], day, "morning")
+        await _send_agent(app, ag.sd_id, photos, day, "morning")
 
     # Adminga ertalabki svodka (qarz/vazvrat bo'yicha eng muhimlari)
     await _admin_morning(app, dc, day)
@@ -123,7 +127,7 @@ async def evening_job(app: Application):
     # Shaxsiy: 3 karta har agentga
     for ag in dc.agents:
         cards = dc.evening_cards(ag.sd_id)
-        photos = [render_evening_card(cards[0]), render_plan_card(cards[1]),
+        photos = [render_ball_card(cards[0]), render_plan_card(cards[1]),
                   render_toy_card(cards[2])]
         await _send_agent(app, ag.sd_id, photos, day, "evening")
 

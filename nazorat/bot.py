@@ -24,8 +24,8 @@ from db import get_conn, init_db
 
 from . import storage
 from .build import DayContext
-from .cards import (render_evening_card, render_group_daily, render_morning_card,
-                    render_plan_card, render_toy_card)
+from .cards import (render_ball_card, render_debt_card, render_group_daily,
+                    render_plan_card, render_returns_card, render_toy_card)
 from .core.rules import load_agents
 from .nz_config import ADMIN_IDS, DRY_RUN, NAZORAT_BOT_TOKEN
 from .storage import init_nz_tables
@@ -127,7 +127,7 @@ async def cmd_bugun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return await update.message.reply_text("Avval kodingizni yuboring: /start")
     dc = DayContext()
     cards = dc.evening_cards(b["sd_id"])
-    await update.message.reply_photo(render_evening_card(cards[0]))
+    await update.message.reply_photo(render_ball_card(cards[0]))
     await update.message.reply_photo(render_plan_card(cards[1]))
     await update.message.reply_photo(render_toy_card(cards[2]))
 
@@ -145,7 +145,15 @@ async def cmd_qarz(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not b or b["role"] != "agent":
         return await update.message.reply_text("Avval kodingizni yuboring: /start")
     dc = DayContext()
-    await update.message.reply_photo(render_morning_card(dc.morning_card(b["sd_id"])))
+    await update.message.reply_photo(render_debt_card(dc.morning_card(b["sd_id"])))
+
+
+async def cmd_vazvrat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    b = await _get_binding(update.effective_chat.id)
+    if not b or b["role"] != "agent":
+        return await update.message.reply_text("Avval kodingizni yuboring: /start")
+    dc = DayContext()
+    await update.message.reply_photo(render_returns_card(dc.morning_card(b["sd_id"])))
 
 
 async def cmd_oy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -182,11 +190,11 @@ async def _send_self_report(app, chat_id: int, binding):
     if binding["role"] == "agent":
         dc = DayContext()
         cards = dc.evening_cards(binding["sd_id"])
-        await app.bot.send_photo(chat_id, render_evening_card(cards[0]))
+        await app.bot.send_photo(chat_id, render_ball_card(cards[0]))
         await app.bot.send_photo(chat_id, render_plan_card(cards[1]))
         await app.bot.send_photo(chat_id, render_toy_card(cards[2]))
     else:
-        await app.bot.send_message(chat_id, "✅ Ulangansiz. Buyruqlar: /bugun /oy /toy /qarz")
+        await app.bot.send_message(chat_id, "✅ Ulangansiz. Buyruqlar: /bugun /oy /toy /qarz /vazvrat")
 
 
 # ==================================================================

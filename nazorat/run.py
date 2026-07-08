@@ -86,6 +86,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("oy", nzbot.cmd_oy))
     app.add_handler(CommandHandler("toy", nzbot.cmd_toy))
     app.add_handler(CommandHandler("qarz", nzbot.cmd_qarz))
+    app.add_handler(CommandHandler("vazvrat", nzbot.cmd_vazvrat))
     app.add_handler(CommandHandler("yordam", nzbot.cmd_yordam))
     app.add_handler(CommandHandler("tasdiqla", nzbot.cmd_tasdiqla))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, nzbot.on_text))

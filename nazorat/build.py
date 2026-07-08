@@ -95,11 +95,13 @@ class DayContext:
                              f"(kun savdosidan {returns_total:,.0f} ayirildi)".replace(",", " "))
 
         debt_limit = ag.debt_limit or self.rules.debt_limit[s.league]
+        returns_month_pct = (s.month_returns / s.month_sales * 100) if s.month_sales else 0
         return {
             "name": ag.short,
             "league_label": "Shahar ligasi" if s.league == "city" else "Viloyat ligasi",
             "date_label": f"{self.today.day}-{MONTHS_UZ[self.today.month].upper()}",
             "returns": returns, "returns_total": returns_total, "ball_note": ball_note,
+            "returns_month": s.month_returns, "returns_month_pct": returns_month_pct,
             "debts": debts, "debts_all": debts, "debt_total": debt_total,
             "debt_limit": debt_limit,
         }

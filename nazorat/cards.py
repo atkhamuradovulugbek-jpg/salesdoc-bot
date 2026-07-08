@@ -371,51 +371,28 @@ def ball_pill(ball):
 
 
 # ==================================================================
-# 1. KECHKI ASOSIY KARTA (plitka tuzilmasi)
+# 1. BALL MUSOBAQASI (kechki, faqat ball o'yiniga bag'ishlangan)
 # ==================================================================
 
-def render_evening_card(x: dict) -> bytes:
+def render_ball_card(x: dict) -> bytes:
     c = Card()
     sub = x["league_label"] + (" · kuzatuv rejimi" if x.get("observe_only")
                                else f" · reja {x['ball_plan']} ball")
-    c.header("kechki hisobot", x["date_label"], x["name"], sub)
+    c.header("ball musobaqasi", x["date_label"], x["name"], sub)
 
-    vs_plan = x["ball_today"] - 3   # kunlik "reja" = 3 ball (100%); undan farq
+    vs_plan = x["ball_today"] - 3   # kunlik "reja" = 3 ball (100%)
     c.hero(x["ball_today"], x["today_sales"], x["today_pct"], vs_plan)
     c.month_panel(x["month_ball"], x["ball_plan"], x["prognoz_ball"],
                   observe=x.get("observe_only"))
 
-    # 4 stat plitka: SAVDO, KPI, QARZ, O'SISH
-    kpi_pct = x["kpi_pct"]
-    kpi_col = GREEN if kpi_pct >= 100 else (WHITE if kpi_pct >= 80 else RED)
-    debt_ok = x["debt"] <= x["debt_limit"]
-    debt_frac = x["debt"] / x["debt_limit"] if x["debt_limit"] else 0
-    tiles = [
-        {"icon": "sales", "label": "Savdo (oylik)", "value": fmt(x.get("month_sales", 0)),
-         "sub": "so'm", "badge": BADGE_PINK, "icon_color": PINK_SOFT, "value_color": WHITE},
-        {"icon": "kpi", "label": "KPI reja", "value": f"{kpi_pct:.0f}%",
-         "sub": ("bajarildi" if kpi_pct >= 100 else "rejagacha yo'l bor"),
-         "badge": BADGE_GREEN if kpi_pct >= 100 else BADGE_NEUTRAL,
-         "icon_color": kpi_col, "value_color": kpi_col},
-        {"icon": "debt", "label": "Qarz", "value": fmt(x["debt"]),
-         "sub": f"limit {fmt(x['debt_limit'])}",
-         "badge": BADGE_RED if not debt_ok else BADGE_NEUTRAL,
-         "icon_color": RED if not debt_ok else SUB,
-         "value_color": RED if not debt_ok else WHITE},
-    ]
-    if x.get("growth_pct") is not None:
-        g = x["growth_pct"]
-        tiles.append({"icon": "growth", "label": "O'sish (o'tgan oyga)", "value": f"{g:+.0f}%",
-                      "sub": ("sovrin yo'lida" if g >= 10 else "pasaygan" if g < 0 else "o'smoqda"),
-                      "badge": BADGE_GREEN if g >= 10 else BADGE_NEUTRAL,
-                      "icon_color": GREEN if g >= 0 else RED,
-                      "value_color": GREEN if g >= 0 else RED})
+    # Aniq, ajratilgan ball ko'rsatkichlari
+    c.section("Ball hisobi", icon="target")
+    c.row("Bugungi savdodan", f"+{x['ball_today']} ball")
+    c.row("Shu oyda jami to'plangan", f"{x['month_ball']} ball")
+    if not x.get("observe_only") and x["ball_plan"]:
+        c.row("Oylik ball rejasi", f"{x['ball_plan']} ball", divider=False)
     else:
-        tiles.append({"icon": "return", "label": "Vazvrat (oyda)",
-                      "value": f"{x['returns_month_pct']:.1f}%", "sub": "qaytgan tovar",
-                      "badge": BADGE_NEUTRAL, "icon_color": SUB,
-                      "value_color": GREEN if x["returns_month_pct"] < 3 else RED})
-    c.stat_tiles(tiles)
+        c.row("Bugungi savdo", f"{fmt(x['today_sales'])} so'm", divider=False)
 
     if x.get("action"):
         c.callout(x["action"], "pink")
@@ -545,28 +522,20 @@ def render_toy_card(x: dict) -> bytes:
 
 
 # ==================================================================
-# 4. ERTALABKI QARZ/VAZVRAT — hamma do'kon raqamli
+# 4. QARZ KARTASI (ertalabki) — 50k dan yuqori barcha do'kon raqamli
 # ==================================================================
 
-def render_morning_card(x: dict) -> bytes:
+def render_debt_card(x: dict) -> bytes:
     c = Card()
-    c.header("ertalabki hisobot", x["date_label"], x["name"], x["league_label"])
-
-    c.section("Kecha kelgan vazvratlar", icon="return")
-    if x["returns"]:
-        for i, (shop, summa) in enumerate(x["returns"], 1):
-            c.numbered_row(i, shop, f"−{fmt(summa)}", amount_color=RED)
-        c.row("Jami vazvrat", f"−{fmt(x['returns_total'])}", value_color=RED, divider=False)
-    else:
-        c.row("Vazvrat", "yo'q", value_color=GREEN, divider=False)
-    if x.get("ball_note"):
-        c.callout(x["ball_note"], "warn", label="BALL O'ZGARDI", icon="debt")
-
-    c.section("Qarz — 50 000 so'mdan yuqori barcha do'konlar", icon="debt")
+    c.header("qarz hisoboti", x["date_label"], x["name"], x["league_label"])
+    c.section("50 000 so'mdan yuqori barcha do'konlar", icon="debt")
     debts = x.get("debts_all", x["debts"])
-    for i, (shop, summa, age) in enumerate(debts, 1):
-        age_txt = f"{age} kun" if age else ""
-        c.numbered_row(i, shop, fmt(summa), sub=age_txt)
+    if debts:
+        for i, (shop, summa, age) in enumerate(debts, 1):
+            age_txt = f"{age} kun" if age else ""
+            c.numbered_row(i, shop, fmt(summa), sub=age_txt)
+    else:
+        c.row("Qarz", "yo'q", value_color=GREEN, divider=False)
     frac = x["debt_total"] / x["debt_limit"] if x["debt_limit"] else 0
     col = GREEN if frac <= 0.8 else RED
     c.gap(4)
@@ -574,6 +543,32 @@ def render_morning_card(x: dict) -> bytes:
           value_color=col, divider=False)
     c.bar("Limit to'ldi", frac, f"{frac*100:.0f}%", fill=col)
     c.footer("Eng eski qarz (10+ kun) qizil bilan belgilanadi.")
+    return c.png()
+
+
+# ==================================================================
+# 5. VAZVRAT KARTASI (ertalabki) — kunlik do'kon-do'kon + oylik jami
+# ==================================================================
+
+def render_returns_card(x: dict) -> bytes:
+    c = Card()
+    c.header("vazvrat hisoboti", x["date_label"], x["name"], x["league_label"])
+    c.section("Kecha qaytgan tovarlar", icon="return")
+    if x["returns"]:
+        for i, (shop, summa) in enumerate(x["returns"], 1):
+            c.numbered_row(i, shop, f"−{fmt(summa)}", amount_color=RED)
+        c.row("Kecha jami vazvrat", f"−{fmt(x['returns_total'])}", value_color=RED, divider=False)
+    else:
+        c.row("Kecha vazvrat", "yo'q", value_color=GREEN, divider=False)
+
+    c.section("Shu oy bo'yicha", icon="calendar")
+    mcol = GREEN if x.get("returns_month_pct", 0) < 3 else RED
+    c.row("Oylik jami vazvrat", f"{fmt(x.get('returns_month', 0))} so'm", value_color=WHITE)
+    c.row("Savdoga nisbatan", f"{x.get('returns_month_pct', 0):.1f}%",
+          value_color=mcol, divider=False)
+    if x.get("ball_note"):
+        c.callout(x["ball_note"], "warn", label="BALL O'ZGARDI", icon="debt")
+    c.footer("Vazvrat o'sha kun savdosidan ayiriladi — ball qayta hisoblanadi.")
     return c.png()
 
 

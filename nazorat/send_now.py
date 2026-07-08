@@ -13,8 +13,9 @@ from telegram import Bot
 
 from db import get_conn
 from .build import DayContext
-from .cards import (render_admin_summary, render_evening_card, render_group_daily,
-                    render_morning_card, render_plan_card, render_toy_card)
+from .cards import (render_admin_summary, render_ball_card, render_debt_card,
+                    render_group_daily, render_plan_card, render_returns_card,
+                    render_toy_card)
 from .nz_config import ADMIN_IDS, NAZORAT_BOT_TOKEN
 from .storage import init_nz_tables
 
@@ -40,11 +41,15 @@ async def main():
                 parse_mode="HTML")
 
             ev = dc.evening_cards(sample.sd_id)
-            await bot.send_photo(aid, render_evening_card(ev[0]), caption="1) Kunlik natija")
-            await bot.send_photo(aid, render_plan_card(ev[1]), caption="2) Oylik plan")
+            mc = dc.morning_card(sample.sd_id)
+            await bot.send_message(aid, "🌙 <b>KECHKI (20:00) — 3 karta</b>", parse_mode="HTML")
+            await bot.send_photo(aid, render_ball_card(ev[0]), caption="1) Ball musobaqasi")
+            await bot.send_photo(aid, render_plan_card(ev[1]), caption="2) Savdo reja")
             await bot.send_photo(aid, render_toy_card(ev[2]), caption="3) Happy Toy")
-            await bot.send_photo(aid, render_morning_card(dc.morning_card(sample.sd_id)),
-                                 caption="Ertalabki qarz/vazvrat (10:00)")
+            await bot.send_message(aid, "☀️ <b>ERTALABKI (10:00) — 2 karta</b>", parse_mode="HTML")
+            await bot.send_photo(aid, render_debt_card(mc), caption="4) Qarz")
+            await bot.send_photo(aid, render_returns_card(mc), caption="5) Vazvrat")
+            await bot.send_message(aid, "👥 <b>GURUH + SIZGA</b>", parse_mode="HTML")
             await bot.send_photo(aid, render_group_daily(dc.group_daily("city")),
                                  caption="Guruhga — kunlik ballar (shahar)")
             await bot.send_photo(aid, render_admin_summary(dc.admin_evening("city")),
