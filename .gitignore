@@ -19,3 +19,4 @@ diagnose.py
 diagnose2.py
 test_sync.py
 sample_order.json
+.pytest_cache/

@@ -1,0 +1,84 @@
+# rules.yaml — Siribom Nazorat Bot biznes qoidalari.
+# HAMMA raqamlar shu yerda — kodda hech narsa hardcode qilinmaydi.
+
+timezone: Asia/Tashkent
+sunday_off: true              # yakshanba dam (26 kun/oy standarti)
+
+# Buyurtma statuslari: yaroqli savdo deb hisoblanadiganlar
+statuses_ok: [1, 2, 3]
+
+# Kunlik reja (so'm) — liga bo'yicha
+daily_plan:
+  city: 2_000_000
+  region: 2_310_000
+
+# Ball shkalasi: kunlik reja bajarilishi (%) → ball.
+# Yuqoridan pastga tekshiriladi, birinchi mos kelgani olinadi.
+ball_scale:
+  - {min_pct: 150, ball: 4}
+  - {min_pct: 100, ball: 3}
+  - {min_pct: 90,  ball: 2}
+  - {min_pct: 80,  ball: 1}
+  - {min_pct: 0,   ball: 0}
+
+# Vazvrat qoidasi: tovar qaytsa, o'sha KUN savdosidan ayiriladi va kun balli
+# qayta hisoblanadi (net). 2026-iyuldan amal qiladi.
+returns_reduce_ball: true
+
+# Oylik savdo plani (so'm) — KPI uchun
+monthly_sales_plan:
+  city: 50_000_000
+  region: 60_000_000
+
+# Podium (oylik ball o'yini): plandan OSHGAN ballar bo'yicha reyting.
+podium:
+  prizes: [1_500_000, 1_000_000, 500_000]   # 1/2/3-o'rin
+  min_over: 1                # kamida +1 oshganlar qatnashadi
+  no_repeat_first: true      # 1-o'rinni bitta agent ketma-ket 2 oy ololmaydi
+
+# Eng zo'r o'sish sovrini: o'tgan oyga nisbatan SOF (vazvrat ayirilgan) savdo o'sishi
+growth:
+  prize: 700_000
+  min_pct: 10                # kamida +10%
+  no_repeat: true            # ketma-ket 2 oy berilmaydi
+
+# Happy Toy aksiyasi (2026-iyuldan, hamma ligaga bir xil shkala)
+toy:
+  sku_ids: [d0_146]          # Kinder Toy (zummi) 24 donalik
+  units_per_block: 24
+  tiers:                     # oylik sotilgan (qaytmagan) bloklar → bonus
+    - {blocks: 150, bonus: 1_200_000}
+    - {blocks: 135, bonus: 900_000}
+    - {blocks: 105, bonus: 600_000}
+
+# KPI komissiya: oylik savdo pog'onasi (so'mdan boshlab) → butun summaga foiz
+kpi_commission:
+  city:
+    - {min_sales: 60_000_000, pct: 6}
+    - {min_sales: 50_000_000, pct: 5}
+    - {min_sales: 40_000_000, pct: 4}
+    - {min_sales: 30_000_000, pct: 3}
+    - {min_sales: 20_000_000, pct: 2}
+  region:
+    - {min_sales: 80_000_000, pct: 6}
+    - {min_sales: 60_000_000, pct: 5}
+    - {min_sales: 40_000_000, pct: 4}
+    - {min_sales: 30_000_000, pct: 3}
+
+# KPI plan bonusi: plan bajarilishi (%) pog'onasi → bonus (komissiyadan alohida)
+kpi_plan_bonus:
+  city:
+    - {min_pct: 100, bonus: 1_000_000}
+    - {min_pct: 90,  bonus: 750_000}
+    - {min_pct: 80,  bonus: 500_000}
+  region:
+    - {min_pct: 100, bonus: 1_000_000}
+
+# Qarz limiti (so'm) — liga bo'yicha standart (agentga alohida ham berish mumkin)
+debt_limit:
+  city: 3_000_000
+  region: 4_000_000
+
+# Ogohlantirish qoidalari
+alerts:
+  dead_days_zero_ball: 2     # ketma-ket shuncha kun 0 ball = signal

@@ -1,0 +1,125 @@
+# agents.yaml — agentlar ro'yxati (FAZA 1 discovery'dan, jonli API bilan tasdiqlangan).
+# code — Sales Doctor'dagi agent kodi (code_1C), botga ulanish kodi sifatida ishlatiladi.
+# ball_plan — oylik ball plani (egasi bergan).
+# league: city (Toshkent shahar) / region (viloyat).
+
+agents:
+  # ---------- SHAHAR ----------
+  - sd_id: d0_51
+    name: Jalolov Bahodir
+    area: Yunusobod
+    league: city
+    code: TSH-YNB-01
+    ball_plan: 70
+  - sd_id: d0_145
+    name: Jonibek Po'latov
+    area: Yashnabod
+    league: city
+    code: TSH-YSH-01
+    ball_plan: 70
+  - sd_id: d0_130
+    name: Abdulaziz Abdusattarov
+    area: Olmazor
+    league: city
+    code: TSH-OLM-01
+    ball_plan: 70
+  - sd_id: d0_148
+    name: Sherzod Qanotov
+    area: Yangihayot
+    league: city
+    code: TSH-YHT-01
+    ball_plan: 60
+  - sd_id: d0_141
+    name: Jasmina Viktorova
+    area: Chilonzor
+    league: city
+    code: TSH-CHL-01
+    ball_plan: 60
+  - sd_id: d0_150
+    name: Sobirov Umarjon
+    area: Bektemir
+    league: city
+    code: TSH-BKT-01
+    ball_plan: 60
+  - sd_id: d0_138
+    name: Xikmatilla Tohirov
+    area: Uchtepa
+    league: city
+    code: TSH-UCH-01
+    ball_plan: 50
+  - sd_id: d0_131
+    name: Rahmonov Burhoniddin
+    area: Shayhontohur
+    league: city
+    code: TSH-SHT-01
+    ball_plan: 50
+
+  # Jumagul ketmoqda — o'rniga yangi agent kelganda shu yozuv yangilanadi
+  # (sd_id o'zgaradi, kod TSH-MUB-01 qoladi). Yangi agent birinchi to'liq oyi
+  # "kuzatuv rejimi"da bo'ladi: ball hisoblanadi, plan/sovrin yo'q.
+  - sd_id: d0_144
+    name: Ibragimova Jumagul
+    area: Mirzo Ulugbek
+    league: city
+    code: TSH-MUB-01
+    ball_plan: 0
+    observe_only: true
+
+  # ---------- VILOYAT ----------
+  - sd_id: d0_89
+    name: Rashidova Rano
+    area: Chinoz+Oqqurg'on+Quyi Chirchiq
+    league: region
+    code: TVL-CHN-01
+    ball_plan: 80
+  - sd_id: d0_99
+    name: Aisha Husanova
+    area: Chirchiq+Bo'stonliq+Keles
+    league: region
+    code: TVL-CHQ-01
+    ball_plan: 70
+  - sd_id: d0_134
+    name: Husniobod opa
+    area: To'ytepa
+    league: region
+    code: TVL-TYT-01
+    ball_plan: 70
+  - sd_id: d0_146
+    name: Dildora Xaydarova
+    area: Olmaliq
+    league: region
+    code: TVL-OLM-01
+    ball_plan: 70
+  - sd_id: d0_103
+    name: Buranbayeva Yulduz
+    area: Yangiyo'l
+    league: region
+    code: TVL-YGY-01
+    ball_plan: 70
+  - sd_id: d0_140
+    name: Usmonbek Safarmatov
+    area: Angren
+    league: region
+    code: TVL-ANG-01
+    ball_plan: 60
+  - sd_id: d0_151
+    name: Umarova Maftuna
+    area: Qibray
+    league: region
+    code: TVL-QBR-01
+    ball_plan: 60
+  - sd_id: d0_152
+    name: Ibragimova Eliza
+    area: Yangibozor+Parkent
+    league: region
+    code: TVL-YNG-01
+    ball_plan: 60
+
+# Supervayzerlar (v2'da to'liq ulanadi; kodlar hozirdan band)
+supervisors:
+  - code: SPV-TSH-01
+    name: Shahar supervayzeri
+    league: city
+  - code: SPV-TVL-01
+    name: Viloyat supervayzeri
+    league: region
