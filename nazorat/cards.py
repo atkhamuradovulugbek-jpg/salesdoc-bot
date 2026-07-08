@@ -376,26 +376,61 @@ def ball_pill(ball):
 
 def render_ball_card(x: dict) -> bytes:
     c = Card()
-    sub = x["league_label"] + (" · kuzatuv rejimi" if x.get("observe_only")
-                               else f" · reja {x['ball_plan']} ball")
-    c.header("ball musobaqasi", x["date_label"], x["name"], sub)
+    c.header("ball musobaqasi", x["date_label"], x["name"], x["league_label"])
 
-    vs_plan = x["ball_today"] - 3   # kunlik "reja" = 3 ball (100%)
-    c.hero(x["ball_today"], x["today_sales"], x["today_pct"], vs_plan)
-    c.month_panel(x["month_ball"], x["ball_plan"], x["prognoz_ball"],
-                  observe=x.get("observe_only"))
+    # BUGUNGI NATIJA: chapda savdo, o'ngda katta +ball
+    h = 148
+    c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h], 18, fill=TILE2)
+    x0 = PAD + 34
+    c.d.text((x0, c.y + 26), "BUGUNGI NATIJA", font=_font(21, bold=True), fill=MUTED)
+    c.d.text((x0, c.y + 60), "Savdo", font=_font(24), fill=SUB)
+    c.d.text((x0, c.y + 94), f"{fmt(x['today_sales'])} so'm", font=_font(38, bold=True), fill=WHITE)
+    bt = f"+{x['ball_today']}"
+    fb = _font(74, bold=True)
+    bw = c.d.textlength(bt, font=fb)
+    c.d.text((W - PAD - 40 - bw - 90, c.y + 44), bt, font=fb, fill=PINK)
+    c.d.text((W - PAD - 40 - 82, c.y + 74), "ball", font=_font(40, bold=True), fill=PINK_SOFT)
+    c.y += h + 16
 
-    # Aniq, ajratilgan ball ko'rsatkichlari
-    c.section("Ball hisobi", icon="target")
-    c.row("Bugungi savdodan", f"+{x['ball_today']} ball")
-    c.row("Shu oyda jami to'plangan", f"{x['month_ball']} ball")
+    # OY NATIJASI: oylik reja aniq ko'rinadi
     if not x.get("observe_only") and x["ball_plan"]:
-        c.row("Oylik ball rejasi", f"{x['ball_plan']} ball", divider=False)
-    else:
-        c.row("Bugungi savdo", f"{fmt(x['today_sales'])} so'm", divider=False)
+        h2 = 156
+        c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h2], 18, fill=TILE)
+        icons.draw(c.d, "calendar", PAD + 30, c.y + 40, 16, PINK_SOFT, 3)
+        c.d.text((PAD + 62, c.y + 24), "OY NATIJASI", font=_font(21, bold=True), fill=MUTED)
+        c.d.text((PAD + 62, c.y + 52), f"{x['month_ball']}", font=_font(52, bold=True), fill=PINK)
+        mw = c.d.textlength(f"{x['month_ball']}", font=_font(52, bold=True))
+        c.d.text((PAD + 62 + mw + 12, c.y + 74), f"/ {x['ball_plan']} ball",
+                 font=_font(34, bold=True), fill=SUB)
+        # o'ngda: oylik reja yorlig'i
+        c.d.text((W - PAD - 34 - c.d.textlength("OYLIK REJA", font=_font(19, bold=True)), c.y + 30),
+                 "OYLIK REJA", font=_font(19, bold=True), fill=MUTED)
+        pr = f"{x['ball_plan']} ball"
+        c.d.text((W - PAD - 34 - c.d.textlength(pr, font=_font(30, bold=True)), c.y + 54),
+                 pr, font=_font(30, bold=True), fill=WHITE)
+        bx, bw2, by = PAD + 62, W - PAD - 34 - (PAD + 62), c.y + 118
+        c.d.rounded_rectangle([bx, by, bx + bw2, by + 16], 8, fill=TRACK)
+        frac = x["month_ball"] / x["ball_plan"]
+        fw = max(int(bw2 * min(frac, 1)), 10) if frac > 0 else 0
+        if fw:
+            c.d.rounded_rectangle([bx, by, bx + fw, by + 16], 8, fill=PINK)
+        c.y += h2 + 14
 
-    if x.get("action"):
-        c.callout(x["action"], "pink")
+        # KATTA motivatsion qator — "shu sur'atda X ball"
+        reach = x["prognoz_ball"] >= x["ball_plan"]
+        col = GREEN if reach else RED
+        bg = HL_GREEN[0] if reach else HL_RED[0]
+        edge = HL_GREEN[1] if reach else HL_RED[1]
+        hh = 92
+        c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + hh], 16, fill=bg, outline=edge, width=2)
+        icons.draw(c.d, "check" if reach else "flag", PAD + 34, c.y + hh // 2, 16, col, 4)
+        c.d.text((PAD + 72, c.y + 20), "SHU SUR'ATDA DAVOM ETSANGIZ", font=_font(19, bold=True), fill=col)
+        c.d.text((PAD + 72, c.y + 44), f"{x['prognoz_ball']:.0f} ball to'playsiz",
+                 font=_font(38, bold=True), fill=col)
+        c.y += hh + 14
+    else:
+        c.month_panel(x["month_ball"], x["ball_plan"], x["prognoz_ball"], observe=True)
+
     c.footer("Zo'r natija sari davom eting! Har bir ball sizni maqsadingizga yaqinlashtiradi.")
     if x.get("observe_only"):
         c.footer("Kuzatuv rejimi: birinchi oy — ball hisoblanadi, reja va sovrinlar keyingi oydan.")
@@ -406,30 +441,51 @@ def render_ball_card(x: dict) -> bytes:
 # 2. OYLIK REJA KARTASI (sodda, aniq bo'linган)
 # ==================================================================
 
+def _plan_tile(c, label, value, accent, sub="", frac=None):
+    """Ajratilgan katak: chap aksent chiziq + label + katta qiymat (+ ixtiyoriy bar)."""
+    h = 88 if frac is None else 104
+    c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h], 15, fill=TILE)
+    c.d.rounded_rectangle([PAD, c.y + 14, PAD + 7, c.y + h - 14], 4, fill=accent)
+    c.d.text((PAD + 28, c.y + 20), label.upper(), font=_font(19, bold=True), fill=MUTED)
+    c.d.text((PAD + 28, c.y + 44), value, font=_font(34, bold=True), fill=WHITE)
+    if sub:
+        sw = c.d.textlength(sub, font=_font(28, bold=True))
+        c.d.text((W - PAD - 30 - sw, c.y + 40), sub, font=_font(28, bold=True), fill=accent)
+    if frac is not None:
+        bx, bw, by = PAD + 28, W - PAD - 30 - (PAD + 28), c.y + h - 22
+        c.d.rounded_rectangle([bx, by, bx + bw, by + 12], 6, fill=TRACK)
+        fw = max(int(bw * min(max(frac, 0), 1)), 8) if frac > 0 else 0
+        if fw:
+            c.d.rounded_rectangle([bx, by, bx + fw, by + 12], 6, fill=accent)
+    c.y += h + 12
+
+
 def render_plan_card(x: dict) -> bytes:
     c = Card()
     c.header("oylik reja", x["date_label"], x["name"],
              f"{x['month_label']} · {x['wd_passed']}-kun / {x['wd_total']} · {x['wd_remaining']} kun qoldi")
 
-    # Aniq 4 qadam: reja → bajardingiz → qoldi → kuniga kerak
-    c.row("Oylik rejangiz", f"{fmt(x['sales_plan'])} so'm")
-    c.bar("Bajardingiz", x["plan_pct"] / 100, f"{fmt(x['sales_done'])} · {x['plan_pct']:.0f}%",
-          fill=(GREEN if x["plan_pct"] >= 80 else PINK))
-    c.gap(4)
-    c.row("Yana bajarishingiz kerak", f"{fmt(x['plan_remaining'])} so'm")
+    # 3 ajratilgan katak: reja → bajardingiz → yana kerak
+    _plan_tile(c, "Oylik rejangiz", f"{fmt(x['sales_plan'])} so'm", SUB)
+    _plan_tile(c, "Bajardingiz", f"{fmt(x['sales_done'])} so'm", PINK,
+               sub=f"{x['plan_pct']:.0f}%", frac=x["plan_pct"] / 100)
+    _plan_tile(c, "Yana bajarishingiz kerak", f"{fmt(x['plan_remaining'])} so'm", GREEN)
 
-    # Kalit raqam — kuniga kerak (urg'uli plitka)
-    c.gap(6)
-    h = 96
+    # Kalit raqam — kuniga kerak (urg'uli plitka + bugungi savdo)
+    c.gap(4)
+    h = 132
     c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h], 16, fill=TILE2)
-    icons.draw(c.d, "target", PAD + 40, c.y + h // 2, 20, PINK_SOFT, 3)
-    c.d.text((PAD + 80, c.y + 22), "HAR KUNI QILISHINGIZ KERAK", font=_font(20, bold=True), fill=MUTED)
-    c.d.text((PAD + 80, c.y + 48), f"{fmt(x['daily_required'])} so'm", font=_font(38, bold=True), fill=PINK)
+    icons.draw(c.d, "target", PAD + 40, c.y + 52, 20, PINK_SOFT, 3)
+    c.d.text((PAD + 82, c.y + 24), "HAR KUNI QILISHINGIZ KERAK", font=_font(20, bold=True), fill=MUTED)
+    c.d.text((PAD + 82, c.y + 50), f"{fmt(x['daily_required'])} so'm", font=_font(38, bold=True), fill=PINK)
+    # pastki chiziq: bugun bajardingiz
+    c.d.line([(PAD + 30, c.y + 98), (W - PAD - 30, c.y + 98)], fill=HAIR, width=1)
     tp = x["today_pct"]
     tcol = GREEN if tp >= 100 else (WHITE if tp >= 50 else RED)
-    tt = f"Bugun: {tp:.0f}%"
-    tw = c.d.textlength(tt, font=_font(28, bold=True))
-    c.d.text((W - PAD - 34 - tw, c.y + 40), tt, font=_font(28, bold=True), fill=tcol)
+    c.d.text((PAD + 34, c.y + 106), "Bugun bajardingiz:", font=_font(22), fill=SUB)
+    tv = f"{fmt(x['today_sales'])} so'm · {tp:.0f}%"
+    tw = c.d.textlength(tv, font=_font(23, bold=True))
+    c.d.text((W - PAD - 34 - tw, c.y + 105), tv, font=_font(23, bold=True), fill=tcol)
     c.y += h + 18
 
     c.section("Vizitlar", icon="calendar")
@@ -467,6 +523,22 @@ def render_toy_card(x: dict) -> bytes:
     pcol = GREEN if prog >= first_tier else PINK_SOFT
     c.d.text((rx, c.y + 54), f"~{prog:.0f} blok", font=_font(40, bold=True), fill=pcol)
     c.y += h + 16
+
+    # Rangli progress chiziq: hozirgi bloklar → 105 (1-daraja)
+    frac = x["blocks"] / first_tier if first_tier else 0
+    bar_col = GREEN if prog >= first_tier else (RED if frac < 0.33 else PINK)
+    c.d.text((PAD, c.y + 2), f"1-darajaga ({first_tier:.0f})", font=_font(24), fill=SUB)
+    bx = PAD + 250
+    bw = W - PAD - 130 - bx
+    by = c.y + 12
+    c.d.rounded_rectangle([bx, by, bx + bw, by + 18], 9, fill=TRACK)
+    fw = max(int(bw * min(frac, 1)), 10) if frac > 0 else 0
+    if fw:
+        c.d.rounded_rectangle([bx, by, bx + fw, by + 18], 9, fill=bar_col)
+    rt = f"{x['blocks']:.0f} / {first_tier:.0f}"
+    c.d.text((W - PAD - c.d.textlength(rt, font=_font(26, bold=True)), c.y),
+             rt, font=_font(26, bold=True), fill=WHITE)
+    c.y += 52
 
     # Xabar: prognoz 105 dan past bo'lsa harakatga chaqirish
     if prog < first_tier:
@@ -506,7 +578,7 @@ def render_toy_card(x: dict) -> bytes:
             s = "Olindi"
             scol = GREEN
         elif is_open:
-            s = f"OCHIQ · {x['to_next']:.0f} blok qoldi · kuniga {x['per_day_needed']:.1f} · oyda {x.get('days_remaining',0)} kun"
+            s = f"OCHIQ · {x['to_next']:.0f} blok sotish kerak · kuniga {x['per_day_needed']:.1f} tadan"
             scol = PINK_SOFT
         else:
             icons.draw(c.d, "lock", W - PAD - 38, c.y + 26, 13, MUTED, 3)
@@ -580,6 +652,17 @@ def render_group_daily(x: dict) -> bytes:
     c = Card()
     c.header("kunlik ballar", x["date_label"], x["league_label"],
              "Bugungi natijalar · ball teng bo'lsa savdo hal qiladi")
+    # Ustun sarlavhalari
+    c.d.text((PAD + 58, c.y), "AGENT", font=_font(18, bold=True), fill=MUTED)
+    kb = "KUNLIK BALL"
+    c.d.text((W - PAD - 200 - c.d.textlength(kb, font=_font(18, bold=True)) - 12, c.y),
+             kb, font=_font(18, bold=True), fill=MUTED)
+    ks = "KUNLIK SAVDO"
+    c.d.text((W - PAD - c.d.textlength(ks, font=_font(18, bold=True)), c.y),
+             ks, font=_font(18, bold=True), fill=MUTED)
+    c.y += 32
+    c.d.line([(PAD, c.y), (W - PAD, c.y)], fill=HAIR, width=1)
+    c.gap(10)
     for i, (name, ball, sales) in enumerate(x["rows"], 1):
         bg, fg = ball_pill(ball)
         c.rank_row(str(i), name, f"{ball} ball", bg, fg, tail=fmt(sales))
