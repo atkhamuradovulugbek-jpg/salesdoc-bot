@@ -72,13 +72,18 @@ class Rules(BaseModel):
 
 class Agent(BaseModel):
     sd_id: str
-    name: str
+    name: str                                # to'liq ism (Sales Doctor'dagi)
+    display: str = ""                        # qisqa ism (ballplan ro'yxatidagi)
     area: str = ""
     league: str                              # city / region
     code: str
     ball_plan: int = 0
     observe_only: bool = False               # yangi agent: ball bor, plan/sovrin yo'q
     debt_limit: float | None = None          # alohida limit (bo'lmasa liga standarti)
+
+    @property
+    def short(self) -> str:
+        return self.display or (self.name.split()[0] if " " in self.name else self.name)
 
 
 class Supervisor(BaseModel):

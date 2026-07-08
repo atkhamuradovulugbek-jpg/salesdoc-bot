@@ -1,0 +1,210 @@
+"""
+nazorat/bot.py — Siribom Nazorat Bot (agentlarga qaragan motivatsiya boti).
+Asosiy salesdoc-bot'dan ALOHIDA Telegram bot, lekin bir xil bot.db.
+
+Xabarlar:
+  10:00 — ertalabki qarz/vazvrat (shaxsiy)
+  20:00 — kunlik natija + oylik plan + Toy (shaxsiy) + guruh kunlik ball reytingi
+  Kritik ogohlantirishlar (qarz limiti / 2 kun 0 ball)
+DRY_RUN=true bo'lsa — hammasi FAQAT adminga (sinov davri).
+"""
+
+from __future__ import annotations
+
+import logging
+from datetime import date
+
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.constants import ParseMode
+from telegram.error import TelegramError
+from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
+                          ContextTypes, MessageHandler, filters)
+
+from db import get_conn, init_db
+
+from . import storage
+from .build import DayContext
+from .cards import (render_evening_card, render_group_daily, render_morning_card,
+                    render_plan_card, render_toy_card)
+from .core.rules import load_agents
+from .nz_config import ADMIN_IDS, DRY_RUN, NAZORAT_BOT_TOKEN
+from .storage import init_nz_tables
+
+logger = logging.getLogger("nazorat.bot")
+
+AGENTS_CFG = load_agents()
+CODE_TO_AGENT = {a.code.upper(): a for a in AGENTS_CFG.agents}
+CODE_TO_SUP = {s.code.upper(): s for s in AGENTS_CFG.supervisors}
+SD_TO_AGENT = {a.sd_id: a for a in AGENTS_CFG.agents}
+
+
+def _now() -> str:
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("Asia/Tashkent")).isoformat(timespec="seconds")
+
+
+# ==================================================================
+# Kod ulash (/start)
+# ==================================================================
+
+WELCOME = (
+    "👋 Assalomu alaykum! Siribom Nazorat botiga xush kelibsiz.\n\n"
+    "Botga ulanish uchun <b>o'z kodingizni</b> yuboring.\n"
+    "Kod — Sales Doctor'dagi agent kodingiz (masalan <code>TSH-YNB-01</code>).\n\n"
+    "Kodni bilmasangiz — administratorga murojaat qiling."
+)
+
+
+async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(WELCOME, parse_mode=ParseMode.HTML)
+
+
+async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Har qanday matn — kod deb qabul qilinadi (agar hali ulanmagan bo'lsa)."""
+    chat_id = update.effective_chat.id
+    text = (update.message.text or "").strip().upper()
+
+    with get_conn() as conn:
+        binding = storage.binding_by_chat(conn, chat_id)
+
+    # Allaqachon ulangan — buyruqlarni eslатamiz
+    if binding:
+        await _send_self_report(ctx.application, chat_id, binding)
+        return
+
+    # Kod tekshirish
+    agent = CODE_TO_AGENT.get(text)
+    sup = CODE_TO_SUP.get(text)
+    is_admin = chat_id in ADMIN_IDS
+
+    if agent:
+        role, sd_id, name = "agent", agent.sd_id, agent.name
+    elif sup:
+        role, sd_id, name = "supervisor", None, sup.name
+    elif is_admin and text in ("ADMIN", "/ADMIN"):
+        role, sd_id, name = "admin", None, "Administrator"
+    else:
+        await update.message.reply_text(
+            "❌ Kod noto'g'ri. Iltimos, kodingizni tekshirib qayta yuboring."
+        )
+        return
+
+    with get_conn() as conn:
+        old_chat = storage.bind_code(conn, text, chat_id, role, sd_id, _now())
+
+    await update.message.reply_text(
+        f"✅ Ulandingiz!\n\n👤 <b>{name}</b>\n"
+        f"Endi har kuni soat 20:00 da natijangiz, 10:00 da qarz/vazvrat "
+        f"ma'lumotingiz keladi.\n\nBuyruqlar: /bugun /oy /toy /qarz /yordam",
+        parse_mode=ParseMode.HTML,
+    )
+
+    # Kod boshqa chatдan ko'chirilgan bo'lsa — eski chatni ogohlantirib, adminga signal
+    if old_chat:
+        try:
+            await ctx.application.bot.send_message(
+                old_chat, "⚠️ Sizning kodingiz boshqa qurilmada ishlatildi. "
+                          "Agar bu siz bo'lmasangiz, administratorga xabar bering.")
+        except TelegramError:
+            pass
+        await _notify_admins(ctx.application,
+                             f"⚠️ Kod qayta ulandi: {name} ({text}) — eski chat {old_chat} → yangi {chat_id}")
+
+
+# ==================================================================
+# Buyruqlar
+# ==================================================================
+
+async def _get_binding(chat_id: int):
+    with get_conn() as conn:
+        return storage.binding_by_chat(conn, chat_id)
+
+
+async def cmd_bugun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    b = await _get_binding(update.effective_chat.id)
+    if not b or b["role"] != "agent":
+        return await update.message.reply_text("Avval kodingizni yuboring: /start")
+    dc = DayContext()
+    cards = dc.evening_cards(b["sd_id"])
+    await update.message.reply_photo(render_evening_card(cards[0]))
+    await update.message.reply_photo(render_plan_card(cards[1]))
+    await update.message.reply_photo(render_toy_card(cards[2]))
+
+
+async def cmd_toy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    b = await _get_binding(update.effective_chat.id)
+    if not b or b["role"] != "agent":
+        return await update.message.reply_text("Avval kodingizni yuboring: /start")
+    dc = DayContext()
+    await update.message.reply_photo(render_toy_card(dc.evening_cards(b["sd_id"])[2]))
+
+
+async def cmd_qarz(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    b = await _get_binding(update.effective_chat.id)
+    if not b or b["role"] != "agent":
+        return await update.message.reply_text("Avval kodingizni yuboring: /start")
+    dc = DayContext()
+    await update.message.reply_photo(render_morning_card(dc.morning_card(b["sd_id"])))
+
+
+async def cmd_oy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    b = await _get_binding(update.effective_chat.id)
+    if not b or b["role"] != "agent":
+        return await update.message.reply_text("Avval kodingizni yuboring: /start")
+    dc = DayContext()
+    s = dc.snap[b["sd_id"]]
+    # Matnli taqvim (ballar kun bo'yicha)
+    lines = [f"📅 <b>{s.today.strftime('%B')} — ball taqvimi</b>\n"]
+    for d in sorted(s.balls.keys()):
+        bar = "🔥" if s.balls[d] == 4 else "✅" if s.balls[d] == 3 else \
+              "🟢" if s.balls[d] == 2 else "🟡" if s.balls[d] == 1 else "⚪️"
+        lines.append(f"{d.day:2d}-kun: {bar} {s.balls[d]} ball")
+    lines.append(f"\n<b>Jami: {s.month_ball} ball</b>")
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+
+
+async def cmd_yordam(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "<b>Siribom Nazorat — qoidalar</b>\n\n"
+        "🎯 <b>Ball:</b> kunlik savdo ÷ reja → 80%=1, 90%=2, 100%=3, 150%+=4 ball. "
+        "Oy bo'yi jamlanadi. Tovar qaytsa o'sha kun balli kamayadi.\n"
+        "🏆 <b>Podium:</b> oy oxirida plandan eng ko'p oshgan 3 agent sovrin oladi.\n"
+        "🧸 <b>Toy:</b> 105 blok=600k, 135=900k, 150=1.2mln (qaytmagan mahsulotga).\n"
+        "💵 <b>KPI:</b> oylik plan bajarilishiga qarab komissiya + bonus.\n"
+        "💳 <b>Qarz:</b> limitdan oshmasin.\n\n"
+        "Buyruqlar: /bugun /oy /toy /qarz",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+async def _send_self_report(app, chat_id: int, binding):
+    if binding["role"] == "agent":
+        dc = DayContext()
+        cards = dc.evening_cards(binding["sd_id"])
+        await app.bot.send_photo(chat_id, render_evening_card(cards[0]))
+        await app.bot.send_photo(chat_id, render_plan_card(cards[1]))
+        await app.bot.send_photo(chat_id, render_toy_card(cards[2]))
+    else:
+        await app.bot.send_message(chat_id, "✅ Ulangansiz. Buyruqlar: /bugun /oy /toy /qarz")
+
+
+# ==================================================================
+# Admin
+# ==================================================================
+
+async def _notify_admins(app, text: str):
+    for aid in ADMIN_IDS:
+        try:
+            await app.bot.send_message(aid, text)
+        except TelegramError:
+            pass
+
+
+async def cmd_tasdiqla(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Oy yakuni g'oliblarini tasdiqlab, agentlarga/guruhga e'lon qiladi."""
+    if update.effective_chat.id not in ADMIN_IDS:
+        return
+    from .month_end import confirm_and_announce
+    msg = await confirm_and_announce(ctx.application)
+    await update.message.reply_text(msg)

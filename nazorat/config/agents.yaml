@@ -7,48 +7,56 @@ agents:
   # ---------- SHAHAR ----------
   - sd_id: d0_51
     name: Jalolov Bahodir
+    display: Bahodir
     area: Yunusobod
     league: city
     code: TSH-YNB-01
     ball_plan: 70
   - sd_id: d0_145
     name: Jonibek Po'latov
+    display: Jonibek
     area: Yashnabod
     league: city
     code: TSH-YSH-01
     ball_plan: 70
   - sd_id: d0_130
     name: Abdulaziz Abdusattarov
+    display: Abdulaziz
     area: Olmazor
     league: city
     code: TSH-OLM-01
     ball_plan: 70
   - sd_id: d0_148
     name: Sherzod Qanotov
+    display: Sherzod
     area: Yangihayot
     league: city
     code: TSH-YHT-01
     ball_plan: 60
   - sd_id: d0_141
     name: Jasmina Viktorova
+    display: Jasmina
     area: Chilonzor
     league: city
     code: TSH-CHL-01
     ball_plan: 60
   - sd_id: d0_150
     name: Sobirov Umarjon
+    display: Umarjon
     area: Bektemir
     league: city
     code: TSH-BKT-01
     ball_plan: 60
   - sd_id: d0_138
     name: Xikmatilla Tohirov
+    display: Xikmatilla
     area: Uchtepa
     league: city
     code: TSH-UCH-01
     ball_plan: 50
   - sd_id: d0_131
     name: Rahmonov Burhoniddin
+    display: Burhon
     area: Shayhontohur
     league: city
     code: TSH-SHT-01
@@ -59,6 +67,7 @@ agents:
   # "kuzatuv rejimi"da bo'ladi: ball hisoblanadi, plan/sovrin yo'q.
   - sd_id: d0_144
     name: Ibragimova Jumagul
+    display: Jumagul
     area: Mirzo Ulugbek
     league: city
     code: TSH-MUB-01
@@ -68,48 +77,56 @@ agents:
   # ---------- VILOYAT ----------
   - sd_id: d0_89
     name: Rashidova Rano
+    display: Rano
     area: Chinoz+Oqqurg'on+Quyi Chirchiq
     league: region
     code: TVL-CHN-01
     ball_plan: 80
   - sd_id: d0_99
     name: Aisha Husanova
+    display: Aisha
     area: Chirchiq+Bo'stonliq+Keles
     league: region
     code: TVL-CHQ-01
     ball_plan: 70
   - sd_id: d0_134
     name: Husniobod opa
+    display: Husniobod
     area: To'ytepa
     league: region
     code: TVL-TYT-01
     ball_plan: 70
   - sd_id: d0_146
     name: Dildora Xaydarova
+    display: Dildora
     area: Olmaliq
     league: region
     code: TVL-OLM-01
     ball_plan: 70
   - sd_id: d0_103
     name: Buranbayeva Yulduz
+    display: Yulduz
     area: Yangiyo'l
     league: region
     code: TVL-YGY-01
     ball_plan: 70
   - sd_id: d0_140
     name: Usmonbek Safarmatov
+    display: Usmonbek
     area: Angren
     league: region
     code: TVL-ANG-01
     ball_plan: 60
   - sd_id: d0_151
     name: Umarova Maftuna
+    display: Maftuna
     area: Qibray
     league: region
     code: TVL-QBR-01
     ball_plan: 60
   - sd_id: d0_152
     name: Ibragimova Eliza
+    display: Eliza
     area: Yangibozor+Parkent
     league: region
     code: TVL-YNG-01
