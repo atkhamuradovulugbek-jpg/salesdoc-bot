@@ -36,8 +36,14 @@ MUTED = (104, 122, 144)      # xira (label/footer)
 PINK = (255, 74, 150)        # BREND — asosiy ball/KPI/urg'u
 PINK_SOFT = (255, 120, 174)
 GREEN = (60, 214, 130)       # yaxshi holat
+AMBER = (255, 196, 77)       # o'rta holat (svetofor: yashil/sariq/qizil)
 RED = (255, 99, 99)          # yomon holat
 GOLD = (255, 205, 84)        # faqat oy yakuni medallari
+
+
+def status_color(pct: float) -> tuple:
+    """Svetofor: >=100 yashil, 50-99 sariq, <50 qizil."""
+    return GREEN if pct >= 100 else (AMBER if pct >= 50 else RED)
 
 
 def _mix(a, b, t):
@@ -100,7 +106,7 @@ def fmt(n: float) -> str:
 
 
 def _san(s: str) -> str:
-    for a in ("✅", "⚠️", "🔴", "🟡", "✓", "↩️", "🏆", "🔥", "🎯", "→", "»"):
+    for a in ("✅", "⚠️", "🔴", "🟡", "✓", "↩️", "🏆", "🔥", "🎯", "→", "»", "↑", "↓"):
         s = s.replace(a, "")
     return s.strip()
 
@@ -392,6 +398,29 @@ def render_ball_card(x: dict) -> bytes:
     c.d.text((W - PAD - 40 - 82, c.y + 74), "ball", font=_font(40, bold=True), fill=PINK_SOFT)
     c.y += h + 16
 
+    # Bugungi O'RIN (savdodan) + kechagiga nisbatan o'zgarish
+    tr, yr = x.get("today_rank"), x.get("yesterday_rank")
+    if tr:
+        h_r = 88
+        c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h_r], 16, fill=TILE)
+        icons.draw(c.d, "trophy", PAD + 34, c.y + h_r // 2, 15, PINK_SOFT, 3)
+        c.d.text((PAD + 72, c.y + 20), "BUGUNGI SAVDO BO'YICHA O'RNINGIZ", font=_font(18, bold=True), fill=MUTED)
+        c.d.text((PAD + 72, c.y + 44), f"{tr}-o'rin", font=_font(34, bold=True), fill=WHITE)
+        ow = c.d.textlength(f"{tr}-o'rin", font=_font(34, bold=True))
+        c.d.text((PAD + 72 + ow + 14, c.y + 52), f"/ {x.get('league_size','')} agent", font=_font(22), fill=SUB)
+        # o'zgarish
+        if yr:
+            diff = yr - tr   # musbat = ko'tarildi
+            if diff > 0:
+                txt, col, ic = f"↑ kecha {yr}-o'rin edingiz, {diff} pog'ona ko'tarildingiz!", GREEN, "sales"
+            elif diff < 0:
+                txt, col, ic = f"↓ kecha {yr}-o'rin edingiz, {abs(diff)} pog'ona tushdingiz", RED, "sales_down"
+            else:
+                txt, col, ic = f"kecha ham {yr}-o'rin edingiz", SUB, "target"
+            tw = c.d.textlength(_san(txt), font=_font(20, bold=True))
+            c.d.text((W - PAD - 34 - tw, c.y + 34), _san(txt), font=_font(20, bold=True), fill=col)
+        c.y += h_r + 16
+
     # OY NATIJASI: oylik reja aniq ko'rinadi
     if not x.get("observe_only") and x["ball_plan"]:
         h2 = 156
@@ -496,17 +525,18 @@ def render_plan_card(x: dict) -> bytes:
     _plan_tile(c, "Yana bajarishingiz kerak", f"{fmt(x['plan_remaining'])} so'm", GREEN)
 
     # OYLIK PROGNOZ — shu ketishda oyni qancha bilan yopadi (alohida, ajralib)
-    pcol = GREEN if x["prognoz_pct"] >= 100 else (WHITE if x["prognoz_pct"] >= 80 else RED)
+    pcol = status_color(x["prognoz_pct"])
     _big_tile(c, "Oylik prognoz (shu ketishda)", f"{fmt(x['prognoz'])} so'm", pcol,
               sub=f"{x['prognoz_pct']:.0f}%", icon_name="growth")
 
-    # HAR KUNI KERAK + BUGUN BAJARDINGIZ — ikkalasi ham KATTA, teng
-    _big_tile(c, "Har kuni qilishingiz kerak", f"{fmt(x['daily_required'])} so'm", PINK,
-              icon_name="target")
+    # KUNLIK KERAK + BUGUNGI SAVDO — aniq yorliqlar; bugungi savdo svetofor rangida
+    _big_tile(c, "Kunlik qilishingiz kerak bo'lgan savdo", f"{fmt(x['daily_required'])} so'm",
+              PINK, icon_name="target")
     tp = x["today_pct"]
-    tcol = GREEN if tp >= 100 else (WHITE if tp >= 50 else RED)
-    _big_tile(c, "Bugun bajardingiz", f"{fmt(x['today_sales'])} so'm", tcol,
-              sub=f"{tp:.0f}%", icon_name="sales")
+    tcol = status_color(tp)
+    ticon = "sales" if tp >= 100 else "sales_down"
+    _big_tile(c, "Bugungi bajargan savdoingiz", f"{fmt(x['today_sales'])} so'm", tcol,
+              sub=f"{tp:.0f}%", icon_name=ticon)
 
     c.section("Vizitlar", icon="calendar")
     c.row("Oylik vizit rejasi", f"{x['visit_plan']} ta")
@@ -669,12 +699,15 @@ def render_returns_card(x: dict) -> bytes:
         _big_tile(c, f"{rdate} kungi jami vazvrat", f"−{fmt(x['returns_total'])} so'm",
                   RED, icon_name="return")
 
-    # Oylik jami — ALOHIDA katak
+    # Oy bo'yicha — to'liq va qisman ALOHIDA, so'ng jami
+    c.section("Shu oy bo'yicha jami", icon="calendar")
+    c.row("To'liq rad etilgan (oylik)", f"{fmt(x.get('returns_month_full', 0))} so'm", value_color=RED)
+    c.row("Qisman olinmagan (oylik)", f"{fmt(x.get('returns_month_partial', 0))} so'm", value_color=RED)
     mcol = GREEN if x.get("returns_month_pct", 0) < 3 else RED
-    _big_tile(c, "Shu oy bo'yicha jami vazvrat", f"{fmt(x.get('returns_month', 0))} so'm",
-              mcol, sub=f"{x.get('returns_month_pct', 0):.1f}%", icon_name="calendar")
+    _big_tile(c, "Oylik jami vazvrat", f"{fmt(x.get('returns_month', 0))} so'm",
+              mcol, sub=f"{x.get('returns_month_pct', 0):.1f}%", icon_name="return")
     c.footer("To'liq: do'kon butun buyurtmani olmagan. Qisman: buyurtmadan ba'zi tovar olinmagan. "
-             "Ikkalasi ham savdodan chiqarilgan — ball shunga qarab hisoblanadi.")
+             "Almashtirish (obmen) va javon vazvrati sanalmaydi.")
     return c.png()
 
 

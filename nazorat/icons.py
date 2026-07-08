@@ -88,6 +88,14 @@ def _trophy(d, cx, cy, r, c, w):
     d.line([(cx - r * 0.5, cy + r), (cx + r * 0.5, cy + r)], fill=c, width=w + 1)
 
 
+def _sales_down(d, cx, cy, r, c, w):
+    # pastga o'q (savdo pasayishi)
+    d.line([(cx - r, cy - r * 0.6), (cx - r * 0.2, cy + r * 0.1),
+            (cx + r * 0.3, cy - r * 0.3), (cx + r, cy + r * 0.7)], fill=c, width=w, joint="curve")
+    d.line([(cx + r * 0.45, cy + r * 0.7), (cx + r, cy + r * 0.7)], fill=c, width=w)
+    d.line([(cx + r, cy + r * 0.7), (cx + r, cy + r * 0.2)], fill=c, width=w)
+
+
 def _return(d, cx, cy, r, c, w):
     # vazvrat (aylanma o'q)
     d.arc([cx - r, cy - r, cx + r, cy + r], 40, 300, fill=c, width=w)
@@ -96,7 +104,7 @@ def _return(d, cx, cy, r, c, w):
 
 
 _MAP = {
-    "target": _target, "sales": _sales, "kpi": _kpi, "debt": _debt,
+    "target": _target, "sales": _sales, "sales_down": _sales_down, "kpi": _kpi, "debt": _debt,
     "growth": _growth, "flag": _flag, "lock": _lock, "check": _check,
     "calendar": _calendar, "bulb": _bulb, "trophy": _trophy, "return": _return,
 }

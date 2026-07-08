@@ -59,13 +59,34 @@ class DayContext:
     # ---------- shaxsiy kartalar ----------
 
     def evening_cards(self, sd_id: str) -> list[dict]:
-        """Bitta agent uchun 3 karta dict: [evening, plan, toy]."""
+        """Bitta agent uchun 3 karta dict: [ball, plan, toy]."""
         s = self.snap[sd_id]
-        return [
-            s.evening_dict(self._growth_pct.get(sd_id)),
-            s.plan_dict(),
-            s.toy_dict(),
-        ]
+        ball = s.evening_dict(self._growth_pct.get(sd_id))
+        # Bugungi o'rin (savdodan) + kechagiga nisbatan o'zgarish
+        yd = self.today - timedelta(days=1)
+        ball["today_rank"] = self.daily_rank(sd_id, "today")
+        ball["yesterday_rank"] = self.daily_rank(sd_id, yd)
+        ball["league_size"] = len([a for a in self.by_league[s.league] if not a.agent.observe_only])
+        return [ball, s.plan_dict(), s.toy_dict()]
+
+    def daily_rank(self, sd_id: str, when) -> int | None:
+        """Agentning liga ichidagi KUNLIK o'rni (ball, teng bo'lsa savdo).
+        when='today' yoki date obyekti (kechagi kun)."""
+        league = self.snap[sd_id].league
+        entries = []
+        for s in self.by_league[league]:
+            if s.agent.observe_only:
+                continue
+            if when == "today":
+                ball, sales = s.today_ball, s.today_sales
+            else:
+                ball, sales = s.balls.get(when, 0), s.day_sales.get(when, 0.0)
+            entries.append((s.agent.sd_id, ball, sales))
+        ranked = sorted(entries, key=lambda e: (-e[1], -e[2]))
+        for i, (aid, _, _) in enumerate(ranked, 1):
+            if aid == sd_id:
+                return i
+        return None
 
     def morning_card(self, sd_id: str) -> dict:
         """Ertalabki qarz/vazvrat kartasi (kechagi vazvrat + qarz ro'yxati)."""
