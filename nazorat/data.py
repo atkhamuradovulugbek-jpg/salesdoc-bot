@@ -22,6 +22,13 @@ from . import storage
 MONTHS_UZ = ["", "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
              "Iyul", "Avgust", "Sentyabr", "Oktyabr", "Noyabr", "Dekabr"]
 
+
+def fmt(n: float) -> str:
+    try:
+        return f"{int(round(n)):,}".replace(",", " ")
+    except (ValueError, TypeError):
+        return "0"
+
 # Do'konni "haqiqiy" agentga bog'lash (reports.py bilan bir xil mantiq):
 # do'konga eng ko'p zakaz bergan AKTIV agent. Ketgan agent qarzi yangisiga o'tadi.
 _CLIENT_AGENT_CTE = """
@@ -230,6 +237,7 @@ class AgentSnapshot:
             "league_label": "Shahar ligasi" if self.league == "city" else "Viloyat ligasi",
             "date_label": f"{self.today.day}-{MONTHS_UZ[self.today.month].upper()}",
             "ball_today": self.today_ball, "today_sales": self.today_sales, "today_pct": today_pct,
+            "month_sales": self.month_sales,
             "month_ball": self.month_ball, "ball_plan": self.agent.ball_plan,
             "prognoz_ball": proj.ball_projected, "per_day_needed": proj.ball_per_day_needed,
             "growth_pct": growth_pct, "kpi_pct": kpi_pct,
@@ -259,13 +267,16 @@ class AgentSnapshot:
         visit_daily_req = visit_remaining / self.wd_remaining if self.wd_remaining else 0
 
         if prognoz_pct >= 100:
-            status = f"Prognoz plandan yuqori — shu tempda oy {prognoz_pct:.0f}% bilan yopiladi. Davom et!"
+            status = (f"Shu sur'atda davom etsangiz, oyni {prognoz_pct:.0f}% bilan "
+                      f"yopasiz — reja bajariladi. Shu zayilda davom eting!")
             scheme = "ok"
         elif prognoz_pct >= 80:
-            status = f"Prognoz {prognoz_pct:.0f}% — tempni biroz oshirsang plan bajariladi."
+            status = (f"Shu sur'atda oy {prognoz_pct:.0f}% da tugaydi. Kuniga "
+                      f"{fmt(daily_required)} so'm qilsangiz — rejaga yetasiz.")
             scheme = "warn"
         else:
-            status = f"Prognoz {prognoz_pct:.0f}% — savdo faolligini oshirish kerak."
+            status = (f"Shu sur'atda oy {prognoz_pct:.0f}% da qoladi. Rejaga yetish uchun "
+                      f"har kuni {fmt(daily_required)} so'm savdo qilishingiz kerak.")
             scheme = "warn"
 
         return {
@@ -287,6 +298,9 @@ class AgentSnapshot:
         tiers = sorted([(t.blocks, t.bonus) for t in r.toy.tiers])
         per_day = (self.toy.blocks_to_next / max(self.wd_remaining, 1)
                    if self.toy.blocks_to_next else 0)
+        # Prognoz: shu sur'atda oy oxirigacha necha blok
+        daily_avg = self.toy.blocks / self.wd_passed if self.wd_passed else 0
+        prognoz_blocks = daily_avg * self.wd_total
         return {
             "name": self.agent.short,
             "date_label": f"{self.today.day}-{MONTHS_UZ[self.today.month].upper()}",
@@ -294,4 +308,5 @@ class AgentSnapshot:
             "reached_bonus": self.toy.reached_bonus,
             "next_blocks": self.toy.next_tier_blocks, "next_bonus": self.toy.next_tier_bonus,
             "to_next": self.toy.blocks_to_next or 0, "per_day_needed": per_day,
+            "prognoz_blocks": prognoz_blocks, "days_remaining": self.wd_remaining,
         }

@@ -183,8 +183,8 @@ async def _alerts(app, dc: DayContext, day: str):
             target = "admin" if DRY_RUN else (str(chat) if chat else None)
             if target is None or storage.already_sent(conn, day, kind, target):
                 continue
-        text = (f"🔥 {zs} kun nol ketdi. Bugun kichik bo'lsa ham buyurtma kirit — "
-                f"80% reja ham 1 ball beradi. Hali hammasi qo'lingda!")
+        text = (f"{zs} kun natija bo'lmadi. Bugun kichik bo'lsa ham buyurtma kiriting — "
+                f"80% reja ham 1 ball beradi. Hali hammasi qo'lingizda!")
         dest = list(ADMIN_IDS) if DRY_RUN else [chat]
         for did in dest:
             try:

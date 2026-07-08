@@ -1,12 +1,13 @@
 """
 cards.py — Siribom Nazorat botining rasm-kartalari (Pillow, PNG bytes).
 
-Dizayn: premium tungi karta. Siribom logosi brend langari,
-pushti — asosiy urg'u (bitta muhim raqam), lime — ijobiy/pul,
-har metrik qatordan keyin nozik ajratgich chiziq (toza jadval ko'rinishi).
+Dizayn tamoyillari (foydalanuvchi talabi):
+  • 3 RANG: oq/kulrang (matn), pushti (brend — asosiy ball/KPI), yashil/qizil (holat).
+  • Plitka (tile) tuzilmasi — har ko'rsatkich o'z quticha+ikonkada (tushunarli).
+  • Formal "SIZ" tilida. Prognoz emas — "shu sur'atda davom etsangiz".
+  • Sodda: ortiqcha narsa yo'q, muhimi ko'rinadi.
 
 Barcha render_* funksiyalari SOF: tayyor dict oladi, PNG bytes qaytaradi.
-Ma'lumot yig'ish data.py/build.py'da — bu yerda faqat chizish.
 """
 
 from __future__ import annotations
@@ -17,50 +18,51 @@ from io import BytesIO
 
 from PIL import Image, ImageDraw, ImageFont
 
+from . import icons
+
 # ------------------------------------------------------------------
-# Palitra (professional tungi — Luxe Dark)
+# Palitra — 3 rang tamoyili
 # ------------------------------------------------------------------
 
-BG = (13, 18, 26)            # karta foni (chuqur ko'mir-ko'k)
-BG2 = (17, 23, 33)           # ichki panel (bir pog'ona ochiqroq)
-EDGE = (32, 43, 58)          # tashqi chegara
-HAIR = (26, 34, 47)          # qatorlar orasidagi nozik chiziq
-TRACK = (30, 41, 56)         # progress yo'lak
-TEXT = (236, 242, 249)       # asosiy matn
-SUB = (144, 164, 186)        # ikkinchi darajali
-MUTED = (98, 116, 138)       # xira (izoh/footer)
-PINK = (255, 78, 151)        # Siribom pushti (asosiy urg'u)
-PINK_LT = (255, 125, 176)
-LIME = (200, 240, 60)        # Siribom lime
-OK = (70, 224, 138)
-WARN = (255, 196, 77)
-BAD = (255, 107, 107)
-GOLD = (255, 214, 90)
+BG = (12, 17, 24)            # karta foni
+TILE = (19, 26, 37)          # plitka foni
+TILE2 = (24, 32, 45)         # ochiqroq plitka (hero)
+EDGE = (34, 45, 61)          # chegara
+HAIR = (28, 37, 51)          # nozik chiziq
+TRACK = (33, 44, 60)         # progress yo'lak
+WHITE = (240, 245, 251)      # asosiy matn
+SUB = (150, 168, 189)        # ikkinchi daraja
+MUTED = (104, 122, 144)      # xira (label/footer)
+PINK = (255, 74, 150)        # BREND — asosiy ball/KPI/urg'u
+PINK_SOFT = (255, 120, 174)
+GREEN = (60, 214, 130)       # yaxshi holat
+RED = (255, 99, 99)          # yomon holat
+GOLD = (255, 205, 84)        # faqat oy yakuni medallari
 
 
 def _mix(a, b, t):
     return tuple(int(a[i] * (1 - t) + b[i] * t) for i in range(3))
 
 
-PILL_OK = _mix(BG, OK, 0.18)
-PILL_WARN = _mix(BG, WARN, 0.18)
-PILL_BAD = _mix(BG, BAD, 0.18)
-PILL_LIME = _mix(BG, LIME, 0.18)
+BADGE_PINK = _mix(BG, PINK, 0.16)
+BADGE_GREEN = _mix(BG, GREEN, 0.16)
+BADGE_RED = _mix(BG, RED, 0.16)
+BADGE_NEUTRAL = _mix(BG, WHITE, 0.06)
+PILL_GREEN = _mix(BG, GREEN, 0.18)
+PILL_RED = _mix(BG, RED, 0.18)
 PILL_PINK = _mix(BG, PINK, 0.20)
-HL_LIME = (_mix(BG, LIME, 0.11), _mix(BG, LIME, 0.34), _mix(LIME, (255, 255, 255), 0.30))
-HL_OK = (_mix(BG, OK, 0.11), _mix(BG, OK, 0.32), _mix(OK, (255, 255, 255), 0.35))
-HL_WARN = (_mix(BG, WARN, 0.10), _mix(BG, WARN, 0.32), _mix(WARN, (255, 255, 255), 0.25))
-HL_PINK = (_mix(BG, PINK, 0.12), _mix(BG, PINK, 0.34), PINK_LT)
+HL_PINK = (_mix(BG, PINK, 0.12), _mix(BG, PINK, 0.34), PINK_SOFT)
+HL_GREEN = (_mix(BG, GREEN, 0.11), _mix(BG, GREEN, 0.32), _mix(GREEN, WHITE, 0.35))
+HL_RED = (_mix(BG, RED, 0.11), _mix(BG, RED, 0.32), _mix(RED, WHITE, 0.3))
 ME_ROW = _mix(BG, PINK, 0.10)
 
 W = 1080
-PAD = 60
-
+PAD = 56
 _ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 
 
 @lru_cache(maxsize=4)
-def _logo(height: int) -> Image.Image | None:
+def _logo(height: int):
     p = os.path.join(_ASSETS, "logo.png")
     if not os.path.exists(p):
         return None
@@ -69,26 +71,16 @@ def _logo(height: int) -> Image.Image | None:
     return im.resize((int(im.width * s), height), Image.LANCZOS)
 
 
-# ------------------------------------------------------------------
-# Shriftlar
-# ------------------------------------------------------------------
-
-_FONT_REG = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    "/System/Library/Fonts/Helvetica.ttc",
-    "C:/Windows/Fonts/arial.ttf",
-]
-_FONT_BOLD = [
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "/System/Library/Fonts/Helvetica.ttc",
-    "C:/Windows/Fonts/arialbd.ttf",
-]
+_FONT_REG = ["/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+             "/System/Library/Fonts/Helvetica.ttc", "C:/Windows/Fonts/arial.ttf"]
+_FONT_BOLD = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+              "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+              "/System/Library/Fonts/Helvetica.ttc", "C:/Windows/Fonts/arialbd.ttf"]
 
 
 @lru_cache(maxsize=64)
-def _font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont:
+def _font(size: int, bold: bool = False):
     for p in (_FONT_BOLD if bold else _FONT_REG):
         if os.path.exists(p):
             try:
@@ -107,175 +99,216 @@ def fmt(n: float) -> str:
         return "0"
 
 
-def _sanitize(s: str) -> str:
-    for a, b in (("→", "»"), ("✅", ""), ("⚠️", ""), ("🔴", ""), ("🟡", ""),
-                 ("✓", ""), ("↩️", ""), ("🏆", ""), ("🔥", ""), ("🎯", "")):
-        s = s.replace(a, b)
+def _san(s: str) -> str:
+    for a in ("✅", "⚠️", "🔴", "🟡", "✓", "↩️", "🏆", "🔥", "🎯", "→", "»"):
+        s = s.replace(a, "")
     return s.strip()
 
 
 # ==================================================================
-# Karta chizish asosi
+# Chizish asosi
 # ==================================================================
 
 class Card:
-    def __init__(self, height_guess: int = 2600):
+    def __init__(self, height_guess=3000):
         self.img = Image.new("RGB", (W, height_guess), BG)
         self.d = ImageDraw.Draw(self.img)
         self.y = PAD
 
-    # --- header: logo + kicker + sana + sarlavha ---
-
-    def header(self, kicker: str, date_label: str, title: str, subtitle: str = "",
-               accent=PINK_LT):
-        logo = _logo(64)
-        lx = PAD
-        if logo is not None:
-            self.img.paste(logo, (PAD, self.y), logo)
-            lx = PAD + logo.width + 22
-        # kicker (logo yonida, yuqorida)
-        fk = _font(23, bold=True)
-        self.d.text((lx, self.y + 6), kicker.upper(), font=fk, fill=accent)
-        # sana (o'ng yuqori)
-        fd = _font(25, bold=True)
-        dw = self.d.textlength(date_label, font=fd)
-        self.d.text((W - PAD - dw, self.y + 8), date_label, font=fd, fill=SUB)
-        # kicker ostida ingichka izoh chizig'i uchun joy
-        self.d.text((lx, self.y + 36), "AGENTLAR NAZORATI", font=_font(16, bold=True),
-                    fill=MUTED)
-        self.y += 84
-
-        # sarlavha (katta ism)
-        self.d.text((PAD, self.y), title, font=_font(48, bold=True), fill=(255, 255, 255))
-        self.y += 62
-        if subtitle:
-            self.d.text((PAD, self.y), subtitle, font=_font(26), fill=SUB)
-            self.y += 40
-        self._section_line()
-
-    def _section_line(self):
-        self.gap(10)
-        self.d.line([(PAD, self.y), (W - PAD, self.y)], fill=EDGE, width=2)
-        self.gap(18)
-
     def gap(self, h=16):
         self.y += h
 
-    def _hair(self):
-        self.d.line([(PAD, self.y), (W - PAD, self.y)], fill=HAIR, width=1)
+    # --- header: logo + kicker + sana + ism ---
 
-    # --- katta hero raqam ---
+    def header(self, kicker, date_label, title, subtitle=""):
+        logo = _logo(58)
+        lx = PAD
+        if logo is not None:
+            self.img.paste(logo, (PAD, self.y + 2), logo)
+            lx = PAD + logo.width + 20
+        self.d.text((lx, self.y + 14), kicker.upper(), font=_font(24, bold=True), fill=PINK_SOFT)
+        fd = _font(24, bold=True)
+        dw = self.d.textlength(date_label, font=fd)
+        self.d.text((W - PAD - dw, self.y + 16), date_label, font=fd, fill=SUB)
+        self.y += 78
+        # ism — pushti aksent chiziq bilan
+        self.d.rounded_rectangle([PAD, self.y + 4, PAD + 8, self.y + 58], 4, fill=PINK)
+        self.d.text((PAD + 26, self.y), title, font=_font(46, bold=True), fill=WHITE)
+        self.y += 58
+        if subtitle:
+            self.d.text((PAD + 26, self.y), subtitle, font=_font(26), fill=SUB)
+            self.y += 40
+        self.gap(20)
 
-    def hero(self, value: str, suffix: str, color=PINK_LT):
-        f = _font(88, bold=True)
-        self.d.text((PAD, self.y), value, font=f, fill=color)
-        wv = self.d.textlength(value, font=f)
-        self.d.text((PAD + wv + 22, self.y + 46), suffix, font=_font(27), fill=SUB)
-        self.y += 112
-        self._hair()
-        self.gap(16)
+    # --- katta hero plitka (bugungi natija) ---
 
-    # --- oddiy label/value qator + ajratgich ---
+    def hero(self, ball_today, today_sales, today_pct, vs_plan):
+        h = 150
+        self.d.rounded_rectangle([PAD, self.y, W - PAD, self.y + h], 18, fill=TILE2)
+        x = PAD + 34
+        self.d.text((x, self.y + 26), "BUGUNGI NATIJA", font=_font(21, bold=True), fill=MUTED)
+        self.d.text((x, self.y + 56), f"+{ball_today}", font=_font(72, bold=True), fill=PINK)
+        wv = self.d.textlength(f"+{ball_today}", font=_font(72, bold=True))
+        self.d.text((x + wv + 14, self.y + 82), "ball", font=_font(38, bold=True), fill=PINK_SOFT)
+        self.d.text((x, self.y + 118), f"Bugun: {fmt(today_sales)} so'm",
+                    font=_font(24), fill=SUB)
+        # o'ng: reja va vs-plan
+        rx = W - PAD - 300
+        self.d.line([(rx - 20, self.y + 30), (rx - 20, self.y + h - 30)], fill=EDGE, width=2)
+        self.d.text((rx, self.y + 34), "KUNLIK REJA", font=_font(20, bold=True), fill=MUTED)
+        pcol = GREEN if today_pct >= 100 else (WHITE if today_pct >= 80 else RED)
+        self.d.text((rx, self.y + 62), f"{today_pct:.0f}%", font=_font(50, bold=True), fill=pcol)
+        vs_col = GREEN if vs_plan >= 0 else RED
+        vs_txt = f"Rejadan {'+' if vs_plan >= 0 else ''}{vs_plan} ball"
+        self.d.text((rx, self.y + 120), vs_txt, font=_font(23, bold=True), fill=vs_col)
+        self.y += h + 18
 
-    def row(self, label: str, value: str, value_color=TEXT, label_color=SUB,
-            divider=True, value_pill=None):
-        f_l, f_v = _font(29), _font(30, bold=True)
-        self.d.text((PAD, self.y), label, font=f_l, fill=label_color)
+    # --- oy natijasi + "shu sur'atda" ---
+
+    def month_panel(self, month_ball, ball_plan, pace_ball, observe=False):
+        h = 150 if not observe else 110
+        self.d.rounded_rectangle([PAD, self.y, W - PAD, self.y + h], 18, fill=TILE)
+        x = PAD + 34
+        icons.draw(self.d, "calendar", x + 16, self.y + 42, 17, PINK_SOFT, 3)
+        self.d.text((x + 48, self.y + 26), "OY NATIJASI", font=_font(21, bold=True), fill=MUTED)
+        plan_txt = f" / {ball_plan}" if ball_plan else ""
+        self.d.text((x + 48, self.y + 52), f"{month_ball}", font=_font(46, bold=True), fill=PINK)
+        mw = self.d.textlength(f"{month_ball}", font=_font(46, bold=True))
+        self.d.text((x + 48 + mw + 8, self.y + 68), f"{plan_txt} ball", font=_font(28), fill=SUB)
+        # progress bar
+        bx, bw = x + 48, W - PAD - 34 - (x + 48)
+        by = self.y + 108
+        self.d.rounded_rectangle([bx, by, bx + bw, by + 16], 8, fill=TRACK)
+        frac = month_ball / ball_plan if ball_plan else 0
+        fw = max(int(bw * min(frac, 1)), 10) if frac > 0 else 0
+        if fw:
+            self.d.rounded_rectangle([bx, by, bx + fw, by + 16], 8, fill=PINK)
+        if not observe and ball_plan:
+            pct = frac * 100
+            self.d.text((W - PAD - 34 - self.d.textlength(f"{pct:.0f}%", font=_font(24, bold=True)),
+                         self.y + 60), f"{pct:.0f}%", font=_font(24, bold=True), fill=WHITE)
+        self.y += h + 12
+        # "shu sur'atda davom etsangiz" — panel ostida alohida qator
+        if not observe and ball_plan:
+            reach = pace_ball >= ball_plan
+            col = GREEN if reach else RED
+            if reach:
+                txt = f"Shu sur'atda davom etsangiz — {pace_ball:.0f} ball to'playsiz"
+            else:
+                txt = f"Shu sur'atda — {pace_ball:.0f} ball (rejadan {ball_plan - pace_ball:.0f} kam)"
+            icons.draw(self.d, "check" if reach else "debt", PAD + 14, self.y + 14, 13, col, 3)
+            self.d.text((PAD + 38, self.y), txt, font=_font(24, bold=True), fill=col)
+            self.y += 42
+
+    # --- 2 ustunli stat plitkalar ---
+
+    def stat_tiles(self, tiles: list[dict]):
+        """tiles: [{icon, label, value, value_color, sub, badge}] — 2 ustun."""
+        col_w = (W - 2 * PAD - 20) / 2
+        h = 132
+        for i, t in enumerate(tiles):
+            col = i % 2
+            if col == 0:
+                row_y = self.y
+            tx = PAD + col * (col_w + 20)
+            ty = row_y
+            self.d.rounded_rectangle([tx, ty, tx + col_w, ty + h], 16, fill=TILE)
+            # ikonka badge
+            badge = t.get("badge", BADGE_NEUTRAL)
+            self.d.rounded_rectangle([tx + 24, ty + 22, tx + 24 + 52, ty + 22 + 52], 13, fill=badge)
+            icons.draw(self.d, t["icon"], tx + 50, ty + 48, 15, t.get("icon_color", PINK_SOFT), 3)
+            self.d.text((tx + 92, ty + 26), t["label"].upper(), font=_font(19, bold=True), fill=MUTED)
+            self.d.text((tx + 92, ty + 52), t["value"], font=_font(33, bold=True),
+                        fill=t.get("value_color", WHITE))
+            if t.get("sub"):
+                self.d.text((tx + 24, ty + 96), t["sub"], font=_font(21), fill=SUB)
+            if col == 1 or i == len(tiles) - 1:
+                self.y = row_y + h + 16
+
+    # --- oddiy qator (label · value) + ajratgich ---
+
+    def row(self, label, value, value_color=WHITE, divider=True, value_pill=None):
+        self.d.text((PAD, self.y), label, font=_font(28), fill=SUB)
         if value_pill:
             bg, fg = value_pill
-            pw = int(self.d.textlength(value, font=_font(28, bold=True)) + 34)
-            self.d.rounded_rectangle([W - PAD - pw, self.y - 5, W - PAD, self.y + 39],
-                                     11, fill=bg)
-            self.d.text((W - PAD - pw + 17, self.y + 1), value,
-                        font=_font(28, bold=True), fill=fg)
+            pw = int(self.d.textlength(value, font=_font(27, bold=True)) + 32)
+            self.d.rounded_rectangle([W - PAD - pw, self.y - 4, W - PAD, self.y + 38], 11, fill=bg)
+            self.d.text((W - PAD - pw + 16, self.y + 1), value, font=_font(27, bold=True), fill=fg)
         else:
-            wv = self.d.textlength(value, font=f_v)
-            self.d.text((W - PAD - wv, self.y - 1), value, font=f_v, fill=value_color)
-        self.y += 44
+            wv = self.d.textlength(value, font=_font(29, bold=True))
+            self.d.text((W - PAD - wv, self.y - 1), value, font=_font(29, bold=True), fill=value_color)
+        self.y += 42
         if divider:
-            self.gap(10)
-            self._hair()
+            self.gap(9)
+            self.d.line([(PAD, self.y), (W - PAD, self.y)], fill=HAIR, width=1)
             self.gap(11)
         else:
             self.gap(8)
 
-    def bar_row(self, label: str, frac: float, right: str, fill=PINK, divider=True):
-        f_l = _font(27)
-        label_w, right_w = 210, 200
-        self.d.text((PAD, self.y + 2), label, font=f_l, fill=SUB)
-        bx = PAD + label_w
-        bw = W - PAD - right_w - bx
+    def section(self, label, icon=None):
+        self.gap(8)
+        x = PAD
+        if icon:
+            icons.draw(self.d, icon, PAD + 10, self.y + 10, 12, MUTED, 2)
+            x = PAD + 34
+        self.d.text((x, self.y), label.upper(), font=_font(20, bold=True), fill=MUTED)
+        self.y += 38
+
+    # --- do'kon-summa raqamli qator ---
+
+    def numbered_row(self, num, shop, amount, amount_color=WHITE, sub=""):
+        self.d.text((PAD, self.y + 1), f"{num}.", font=_font(26, bold=True), fill=MUTED)
+        self.d.text((PAD + 52, self.y), shop, font=_font(27), fill=(212, 222, 234))
+        lw = self.d.textlength(shop, font=_font(27))
+        if sub:
+            self.d.text((PAD + 52 + lw + 12, self.y + 4), sub, font=_font(21),
+                        fill=RED if "kun" in sub and _age_big(sub) else MUTED)
+        wv = self.d.textlength(amount, font=_font(28, bold=True))
+        self.d.text((W - PAD - wv, self.y), amount, font=_font(28, bold=True), fill=amount_color)
+        self.y += 40
+        self.gap(7)
+        self.d.line([(PAD, self.y), (W - PAD, self.y)], fill=HAIR, width=1)
+        self.gap(8)
+
+    def bar(self, label, frac, right, fill=PINK):
+        self.d.text((PAD, self.y + 2), label, font=_font(26), fill=SUB)
+        bx = PAD + 220
+        bw = W - PAD - 190 - bx
         by = self.y + 14
         self.d.rounded_rectangle([bx, by, bx + bw, by + 15], 8, fill=TRACK)
         fw = max(int(bw * min(max(frac, 0), 1)), 10 if frac > 0 else 0)
         if fw:
             self.d.rounded_rectangle([bx, by, bx + fw, by + 15], 8, fill=fill)
-        fv = _font(28, bold=True)
-        wv = self.d.textlength(right, font=fv)
-        self.d.text((W - PAD - wv, self.y), right, font=fv, fill=TEXT)
+        wv = self.d.textlength(right, font=_font(27, bold=True))
+        self.d.text((W - PAD - wv, self.y), right, font=_font(27, bold=True), fill=WHITE)
         self.y += 46
-        if divider:
-            self.gap(10)
-            self._hair()
-            self.gap(11)
-        else:
-            self.gap(8)
-
-    def section(self, label: str):
-        """Bo'lim sarlavhasi (kichik uppercase)."""
         self.gap(6)
-        self.d.text((PAD, self.y), label.upper(), font=_font(19, bold=True), fill=MUTED)
-        self.y += 34
 
-    def pill(self, x, text, bg, fg, y=None):
-        yy = self.y if y is None else y
-        f = _font(26, bold=True)
-        w = int(self.d.textlength(text, font=f) + 36)
-        self.d.rounded_rectangle([x, yy, x + w, yy + 44], 12, fill=bg)
-        self.d.text((x + 18, yy + 7), text, font=f, fill=fg)
-        return w
-
-    def list_row(self, left, right, right_color=TEXT, sub="", sub_color=MUTED):
-        f_l, f_v, f_s = _font(28), _font(29, bold=True), _font(22)
-        self.d.text((PAD, self.y), left, font=f_l, fill=(206, 217, 230))
-        lw = self.d.textlength(left, font=f_l)
-        if sub:
-            self.d.text((PAD + lw + 12, self.y + 5), sub, font=f_s, fill=sub_color)
-        wv = self.d.textlength(right, font=f_v)
-        self.d.text((W - PAD - wv, self.y - 1), right, font=f_v, fill=right_color)
-        self.y += 42
-        self.gap(8)
-        self._hair()
-        self.gap(9)
-
-    def rank_row(self, pos, name, pill_text, pill_bg, pill_fg, tail="", highlight=False):
-        rh = 62
-        if highlight:
-            self.d.rounded_rectangle([PAD - 18, self.y - 8, W - PAD + 18, self.y + rh - 14],
+    def rank_row(self, pos, name, pill_text, pill_bg, pill_fg, tail="", hl=False):
+        rh = 60
+        if hl:
+            self.d.rounded_rectangle([PAD - 16, self.y - 8, W - PAD + 16, self.y + rh - 14],
                                      12, fill=ME_ROW)
-        self.d.text((PAD + 2, self.y + 9), pos, font=_font(27, bold=True), fill=SUB)
-        self.d.text((PAD + 62, self.y + 5), name, font=_font(31, bold=True),
-                    fill=(255, 210, 228) if highlight else (224, 233, 243))
-        # Summa — o'ng chetga tekislangan (qat'iy ustun)
-        ft = _font(24)
+        self.d.text((PAD + 2, self.y + 8), pos, font=_font(26, bold=True), fill=SUB)
+        self.d.text((PAD + 58, self.y + 4), name, font=_font(30, bold=True),
+                    fill=PINK_SOFT if hl else (222, 231, 241))
+        ft = _font(23)
         if tail:
             tw = self.d.textlength(tail, font=ft)
-            self.d.text((W - PAD - tw, self.y + 10), tail, font=ft, fill=SUB)
-        # Ball plashkasi — qat'iy ustunda (o'ng chekka W-PAD-200), tekislangan
-        fp = _font(26, bold=True)
-        pw = int(self.d.textlength(pill_text, font=fp) + 34)
-        pill_right = W - PAD - 210
-        px = pill_right - pw
-        self.d.rounded_rectangle([px, self.y + 2, pill_right, self.y + 44], 11, fill=pill_bg)
-        self.d.text((px + 17, self.y + 8), pill_text, font=fp, fill=pill_fg)
+            self.d.text((W - PAD - tw, self.y + 9), tail, font=ft, fill=SUB)
+        fp = _font(25, bold=True)
+        pw = int(self.d.textlength(pill_text, font=fp) + 32)
+        pr = W - PAD - 200
+        self.d.rounded_rectangle([pr - pw, self.y + 2, pr, self.y + 42], 11, fill=pill_bg)
+        self.d.text((pr - pw + 16, self.y + 8), pill_text, font=fp, fill=pill_fg)
         self.y += rh
-        self._hair()
+        self.d.line([(PAD, self.y - 4), (W - PAD, self.y - 4)], fill=HAIR, width=1)
 
-    def _wrap(self, text, font, max_w):
+    def _wrap(self, text, font, mw):
         out, cur = [], ""
         for w_ in text.split():
             t = (cur + " " + w_).strip()
-            if self.d.textlength(t, font=font) <= max_w:
+            if self.d.textlength(t, font=font) <= mw:
                 cur = t
             else:
                 if cur:
@@ -285,217 +318,262 @@ class Card:
             out.append(cur)
         return out
 
-    def callout(self, text, scheme="lime", label="ENG FOYDALI HARAKAT"):
-        bg, edge, fg = {"lime": HL_LIME, "ok": HL_OK, "warn": HL_WARN, "pink": HL_PINK}[scheme]
-        f = _font(28)
-        lines = self._wrap(_sanitize(text), f, W - 2 * PAD - 56)
-        head_h = 32 if label else 6
-        h = head_h + len(lines) * 40 + 26
+    def callout(self, text, scheme="pink", label="ENG FOYDALI HARAKAT", icon="bulb"):
+        bg, edge, fg = {"pink": HL_PINK, "ok": HL_GREEN, "green": HL_GREEN, "red": HL_RED,
+                        "warn": HL_RED}[scheme]
+        f = _font(27)
+        ix = PAD + 54 if icon else PAD + 28
+        lines = self._wrap(_san(text), f, W - PAD - ix - 28)
+        head = 30 if label else 0
+        h = 22 + head + len(lines) * 38 + 20
         self.gap(14)
-        self.d.rounded_rectangle([PAD, self.y, W - PAD, self.y + h], 16,
-                                 fill=bg, outline=edge, width=2)
-        ty = self.y + 18
+        self.d.rounded_rectangle([PAD, self.y, W - PAD, self.y + h], 16, fill=bg,
+                                 outline=edge, width=2)
+        if icon:
+            icons.draw(self.d, icon, PAD + 28, self.y + h / 2, 15, edge, 3)
+        ty = self.y + 20
         if label:
-            self.d.text((PAD + 28, ty), label, font=_font(18, bold=True), fill=edge)
-            ty += 32
+            self.d.text((ix, ty), label, font=_font(18, bold=True), fill=edge)
+            ty += 30
         for ln in lines:
-            self.d.text((PAD + 28, ty), ln, font=f, fill=fg)
-            ty += 40
+            self.d.text((ix, ty), ln, font=f, fill=fg)
+            ty += 38
         self.y += h + 12
 
     def footer(self, text):
         self.gap(6)
-        f = _font(22)
-        for ln in self._wrap(_sanitize(text), f, W - 2 * PAD):
+        f = _font(21)
+        for ln in self._wrap(_san(text), f, W - 2 * PAD):
             self.d.text((PAD, self.y), ln, font=f, fill=MUTED)
-            self.y += 31
+            self.y += 30
 
-    def png(self) -> bytes:
-        h = self.y + PAD - 4
+    def png(self):
+        h = self.y + PAD - 6
         img = self.img.crop((0, 0, W, h))
-        d = ImageDraw.Draw(img)
-        d.rounded_rectangle([1, 1, W - 2, h - 2], 26, outline=EDGE, width=2)
+        ImageDraw.Draw(img).rounded_rectangle([1, 1, W - 2, h - 2], 26, outline=EDGE, width=2)
         buf = BytesIO()
         img.save(buf, "PNG")
         return buf.getvalue()
 
 
-def ball_pill(ball: int):
-    if ball >= 4:
-        return PILL_OK, OK
-    if ball == 3:
-        return PILL_LIME, LIME
+def _age_big(sub: str) -> bool:
+    import re
+    m = re.search(r"(\d+)", sub)
+    return bool(m and int(m.group(1)) >= 10)
+
+
+def ball_pill(ball):
+    if ball >= 3:
+        return PILL_GREEN, GREEN
     if ball >= 1:
-        return PILL_WARN, WARN
-    return PILL_BAD, BAD
-
-
-def _pct_pill(pct: float):
-    if pct >= 100:
-        return PILL_OK, OK
-    if pct >= 80:
-        return PILL_LIME, LIME
-    if pct >= 50:
-        return PILL_WARN, WARN
-    return PILL_BAD, BAD
+        return PILL_PINK, PINK_SOFT
+    return PILL_RED, RED
 
 
 # ==================================================================
-# 1. KECHKI ASOSIY KARTA
+# 1. KECHKI ASOSIY KARTA (plitka tuzilmasi)
 # ==================================================================
 
 def render_evening_card(x: dict) -> bytes:
     c = Card()
-    sub = (x["league_label"] + (" · kuzatuv rejimi" if x.get("observe_only")
-           else f" · plan {x['ball_plan']} ball"))
+    sub = x["league_label"] + (" · kuzatuv rejimi" if x.get("observe_only")
+                               else f" · reja {x['ball_plan']} ball")
     c.header("kechki hisobot", x["date_label"], x["name"], sub)
 
-    c.hero(f"+{x['ball_today']} ball",
-           f"bugun {fmt(x['today_sales'])} · reja {x['today_pct']:.0f}%")
+    vs_plan = x["ball_today"] - 3   # kunlik "reja" = 3 ball (100%); undan farq
+    c.hero(x["ball_today"], x["today_sales"], x["today_pct"], vs_plan)
+    c.month_panel(x["month_ball"], x["ball_plan"], x["prognoz_ball"],
+                  observe=x.get("observe_only"))
 
-    plan = max(x["ball_plan"], 1)
-    c.bar_row("Oy balli", x["month_ball"] / plan,
-              f"{x['month_ball']} / {x['ball_plan']}" if x["ball_plan"] else f"{x['month_ball']}",
-              fill=PINK)
-
-    if not x.get("observe_only") and x["ball_plan"]:
-        gap = x["prognoz_ball"] - x["ball_plan"]
-        c.row(f"Prognoz  ~{x['prognoz_ball']:.0f} ball",
-              f"plandan {abs(gap):.0f} kam" if gap < 0 else f"plandan +{gap:.0f}",
-              value_color=(WARN if gap < 0 else OK),
-              divider=(gap >= 0 or x["per_day_needed"] <= 0))
-        if gap < 0 and x["per_day_needed"] > 0:
-            c.row("Plandan oshish uchun", f"kuniga {x['per_day_needed']:.1f} ball")
-
-    c.section("Pul tizimlari")
+    # 4 stat plitka: SAVDO, KPI, QARZ, O'SISH
+    kpi_pct = x["kpi_pct"]
+    kpi_col = GREEN if kpi_pct >= 100 else (WHITE if kpi_pct >= 80 else RED)
+    debt_ok = x["debt"] <= x["debt_limit"]
+    debt_frac = x["debt"] / x["debt_limit"] if x["debt_limit"] else 0
+    tiles = [
+        {"icon": "sales", "label": "Savdo (oylik)", "value": fmt(x.get("month_sales", 0)),
+         "sub": "so'm", "badge": BADGE_PINK, "icon_color": PINK_SOFT, "value_color": WHITE},
+        {"icon": "kpi", "label": "KPI reja", "value": f"{kpi_pct:.0f}%",
+         "sub": ("bajarildi" if kpi_pct >= 100 else "rejagacha yo'l bor"),
+         "badge": BADGE_GREEN if kpi_pct >= 100 else BADGE_NEUTRAL,
+         "icon_color": kpi_col, "value_color": kpi_col},
+        {"icon": "debt", "label": "Qarz", "value": fmt(x["debt"]),
+         "sub": f"limit {fmt(x['debt_limit'])}",
+         "badge": BADGE_RED if not debt_ok else BADGE_NEUTRAL,
+         "icon_color": RED if not debt_ok else SUB,
+         "value_color": RED if not debt_ok else WHITE},
+    ]
     if x.get("growth_pct") is not None:
         g = x["growth_pct"]
-        c.row("O'sish (o'tgan oyga)",
-              f"{g:+.0f}%" + ("  ·  sovrin yo'lida" if g >= 10 else ""),
-              value_color=(OK if g >= 10 else (WARN if g >= 0 else BAD)))
-    c.bar_row("KPI plan", x["kpi_pct"] / 100, f"{x['kpi_pct']:.0f}%", fill=LIME)
-    if x.get("kpi_gap"):
-        need, bonus = x["kpi_gap"]
-        c.row("Keyingi pog'onaga", f"{fmt(need)}  = +{fmt(bonus)}", value_color=LIME)
-
-    rp = x["returns_month_pct"]
-    c.row("Vazvrat", f"bugun {fmt(x['returns_today'])} · oyda {rp:.1f}%",
-          value_color=(OK if rp < 3 else (WARN if rp < 6 else BAD)))
-    debt_ok = x["debt"] <= x["debt_limit"]
-    c.row("Qarz", f"{fmt(x['debt'])} / {fmt(x['debt_limit'])}",
-          value_color=(OK if debt_ok else BAD), divider=False)
+        tiles.append({"icon": "growth", "label": "O'sish (o'tgan oyga)", "value": f"{g:+.0f}%",
+                      "sub": ("sovrin yo'lida" if g >= 10 else "pasaygan" if g < 0 else "o'smoqda"),
+                      "badge": BADGE_GREEN if g >= 10 else BADGE_NEUTRAL,
+                      "icon_color": GREEN if g >= 0 else RED,
+                      "value_color": GREEN if g >= 0 else RED})
+    else:
+        tiles.append({"icon": "return", "label": "Vazvrat (oyda)",
+                      "value": f"{x['returns_month_pct']:.1f}%", "sub": "qaytgan tovar",
+                      "badge": BADGE_NEUTRAL, "icon_color": SUB,
+                      "value_color": GREEN if x["returns_month_pct"] < 3 else RED})
+    c.stat_tiles(tiles)
 
     if x.get("action"):
-        c.callout(x["action"], "lime")
+        c.callout(x["action"], "pink")
+    c.footer("Zo'r natija sari davom eting! Har bir ball sizni maqsadingizga yaqinlashtiradi.")
     if x.get("observe_only"):
-        c.footer("Kuzatuv rejimi: birinchi to'liq oy — ball hisoblanadi, plan va sovrinlar keyingi oydan.")
+        c.footer("Kuzatuv rejimi: birinchi oy — ball hisoblanadi, reja va sovrinlar keyingi oydan.")
     return c.png()
 
 
 # ==================================================================
-# 2. OYLIK PLAN KARTASI
+# 2. OYLIK REJA KARTASI (sodda, aniq bo'linган)
 # ==================================================================
 
 def render_plan_card(x: dict) -> bytes:
     c = Card()
-    c.header("oylik plan", x["date_label"], x["name"],
-             f"{x['month_label']} · ish kuni {x['wd_total']} · ishlandi {x['wd_passed']} · qoldi {x['wd_remaining']}",
-             accent=LIME)
+    c.header("oylik reja", x["date_label"], x["name"],
+             f"{x['month_label']} · {x['wd_passed']}-kun / {x['wd_total']} · {x['wd_remaining']} kun qoldi")
 
-    c.row("Oylik plan", fmt(x["sales_plan"]))
-    c.row("Bajarildi", f"{fmt(x['sales_done'])} · {x['plan_pct']:.0f}%",
-          value_pill=_pct_pill(x["plan_pct"]))
-    c.row("Qoldiq (bajarish kerak)", fmt(x["plan_remaining"]))
-    c.row("Prognoz", f"{fmt(x['prognoz'])} · {x['prognoz_pct']:.0f}%",
-          value_pill=_pct_pill(x["prognoz_pct"]))
-    c.row("Kunlik bajarish kerak", fmt(x["daily_required"]))
-    c.row("Bugun bajarildi", f"{fmt(x['today_sales'])} · {x['today_pct']:.0f}%",
-          value_pill=_pct_pill(x["today_pct"]), divider=False)
+    # Aniq 4 qadam: reja → bajardingiz → qoldi → kuniga kerak
+    c.row("Oylik rejangiz", f"{fmt(x['sales_plan'])} so'm")
+    c.bar("Bajardingiz", x["plan_pct"] / 100, f"{fmt(x['sales_done'])} · {x['plan_pct']:.0f}%",
+          fill=(GREEN if x["plan_pct"] >= 80 else PINK))
+    c.gap(4)
+    c.row("Yana bajarishingiz kerak", f"{fmt(x['plan_remaining'])} so'm")
 
-    c.section("Vizitlar")
-    c.row("Vizit plani " + str(x["visit_plan"]),
-          f"bajarildi {x['visits_done']} · qoldi {x['visit_remaining']}")
+    # Kalit raqam — kuniga kerak (urg'uli plitka)
+    c.gap(6)
+    h = 96
+    c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h], 16, fill=TILE2)
+    icons.draw(c.d, "target", PAD + 40, c.y + h // 2, 20, PINK_SOFT, 3)
+    c.d.text((PAD + 80, c.y + 22), "HAR KUNI QILISHINGIZ KERAK", font=_font(20, bold=True), fill=MUTED)
+    c.d.text((PAD + 80, c.y + 48), f"{fmt(x['daily_required'])} so'm", font=_font(38, bold=True), fill=PINK)
+    tp = x["today_pct"]
+    tcol = GREEN if tp >= 100 else (WHITE if tp >= 50 else RED)
+    tt = f"Bugun: {tp:.0f}%"
+    tw = c.d.textlength(tt, font=_font(28, bold=True))
+    c.d.text((W - PAD - 34 - tw, c.y + 40), tt, font=_font(28, bold=True), fill=tcol)
+    c.y += h + 18
+
+    c.section("Vizitlar", icon="calendar")
+    c.row("Oylik vizit rejasi", f"{x['visit_plan']} ta")
+    c.row("Bordingiz", f"{x['visits_done']} ta · yana {x['visit_remaining']} ta qoldi")
     vok = x["today_visits"] >= x["visit_daily_required"]
-    c.row(f"Kunlik kerak {x['visit_daily_required']:.0f}",
-          f"bugun {x['today_visits']}", value_color=(OK if vok else WARN), divider=False)
+    c.row("Kuniga kerak", f"{x['visit_daily_required']:.0f} ta  (bugun {x['today_visits']} ta)",
+          value_color=(GREEN if vok else WHITE), divider=False)
 
-    c.callout(x["status_text"], x.get("status_scheme", "ok"), label="")
+    c.callout(x["status_text"], x.get("status_scheme", "ok"), label="", icon=None)
     return c.png()
 
 
 # ==================================================================
-# 3. HAPPY TOY
+# 3. HAPPY TOY — prognoz + qulflangan darajalar
 # ==================================================================
 
 def render_toy_card(x: dict) -> bytes:
     c = Card()
-    c.header("happy toy", x["date_label"], x["name"],
-             "Sotilgan, qaytmagan bloklar · 1 blok = 24 dona", accent=LIME)
+    c.header("happy toy", x["date_label"], x["name"], "Sotilgan, qaytmagan bloklar · 1 blok = 24 dona")
 
-    c.hero(f"{x['blocks']:.0f} blok", "shu oyda · qaytmagan", color=LIME)
+    # Hero: hozirgi bloklar
+    h = 120
+    c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h], 18, fill=TILE2)
+    c.d.text((PAD + 34, c.y + 24), "SHU OYDA SOTILGAN", font=_font(21, bold=True), fill=MUTED)
+    c.d.text((PAD + 34, c.y + 52), f"{x['blocks']:.0f}", font=_font(56, bold=True), fill=PINK)
+    bw = c.d.textlength(f"{x['blocks']:.0f}", font=_font(56, bold=True))
+    c.d.text((PAD + 34 + bw + 14, c.y + 74), "blok", font=_font(30, bold=True), fill=PINK_SOFT)
+    # o'ng: prognoz
+    prog = x.get("prognoz_blocks", 0)
+    first_tier = x["tiers"][0][0] if x["tiers"] else 105
+    rx = W - PAD - 340
+    c.d.line([(rx - 20, c.y + 26), (rx - 20, c.y + h - 26)], fill=EDGE, width=2)
+    c.d.text((rx, c.y + 28), "SHU SUR'ATDA — OY OXIRIGACHA", font=_font(18, bold=True), fill=MUTED)
+    pcol = GREEN if prog >= first_tier else PINK_SOFT
+    c.d.text((rx, c.y + 54), f"~{prog:.0f} blok", font=_font(40, bold=True), fill=pcol)
+    c.y += h + 16
 
-    first = x["tiers"][0][0] if x["tiers"] else 105
-    c.bar_row("1-daraja", x["blocks"] / first, f"{x['blocks']:.0f} / {first:.0f}",
-              fill=LIME, divider=False)
+    # Xabar: prognoz 105 dan past bo'lsa harakatga chaqirish
+    if prog < first_tier:
+        msg = (f"Shu sur'atda {first_tier:.0f} blok bonusiga yetmaysiz. "
+               f"Ko'proq harakat qiling — kuniga bir-ikki blok qo'shsangiz bonus qo'lda!")
+        c.callout(msg, "red", label="", icon="flag")
+    else:
+        c.callout(f"Zo'r sur'at! Shu zayilda {first_tier:.0f} blok bonusini olasiz. Davom eting!",
+                  "ok", label="", icon="check")
+
     c.section("Bonus darajalari")
-
-    for i, (blocks, bonus) in enumerate(x["tiers"]):
+    reached_any = False
+    next_open_found = False
+    for blocks, bonus in x["tiers"]:
         reached = x["blocks"] >= blocks
-        is_next = (x.get("next_blocks") == blocks)
-        ring = OK if reached else (PINK if is_next else TRACK)
-        c.d.ellipse([PAD, c.y, PAD + 56, c.y + 56], outline=ring, width=4)
-        bt = f"{blocks:.0f}"
-        bw = c.d.textlength(bt, font=_font(24, bold=True))
-        c.d.text((PAD + 28 - bw / 2, c.y + 14), bt, font=_font(24, bold=True),
-                 fill=(OK if reached else (PINK_LT if is_next else SUB)))
-        c.d.text((PAD + 82, c.y - 2), f"{fmt(bonus)} bonus", font=_font(31, bold=True),
-                 fill=(255, 255, 255) if (reached or is_next) else SUB)
-        s = ("olindi" if reached else
-             (f"{x['to_next']:.0f} blok qoldi · kuniga {x['per_day_needed']:.1f}"
-              if is_next else "keyingi daraja"))
-        c.d.text((PAD + 82, c.y + 34), s, font=_font(24),
-                 fill=(OK if reached else (LIME if is_next else MUTED)))
-        c.y += 86
-        if i < len(x["tiers"]) - 1:
-            c._hair()
-            c.gap(8)
+        is_open = (not reached) and (not next_open_found)
+        if is_open:
+            next_open_found = True
+        locked = (not reached) and (not is_open)
 
-    if x.get("reached_bonus"):
-        c.callout(f"Hozirgacha kafolatlangan bonus: {fmt(x['reached_bonus'])} so'm. "
-                  f"Keyingi darajagacha to'xtama!", "ok", label="")
+        if reached:
+            ring, num_col, name_col = GREEN, GREEN, WHITE
+            reached_any = True
+        elif is_open:
+            ring, num_col, name_col = PINK, PINK_SOFT, WHITE
+        else:
+            ring, num_col, name_col = TRACK, MUTED, MUTED
+
+        c.d.ellipse([PAD, c.y, PAD + 54, c.y + 54], outline=ring, width=4)
+        bt = f"{blocks:.0f}"
+        bwid = c.d.textlength(bt, font=_font(23, bold=True))
+        c.d.text((PAD + 27 - bwid / 2, c.y + 14), bt, font=_font(23, bold=True), fill=num_col)
+        c.d.text((PAD + 80, c.y - 2), f"{fmt(bonus)} so'm bonus", font=_font(30, bold=True), fill=name_col)
+
+        if reached:
+            icons.draw(c.d, "check", W - PAD - 40, c.y + 26, 15, GREEN, 4)
+            s = "Olindi"
+            scol = GREEN
+        elif is_open:
+            s = f"OCHIQ · {x['to_next']:.0f} blok qoldi · kuniga {x['per_day_needed']:.1f} · oyda {x.get('days_remaining',0)} kun"
+            scol = PINK_SOFT
+        else:
+            icons.draw(c.d, "lock", W - PAD - 38, c.y + 26, 13, MUTED, 3)
+            prev_tier = x["tiers"][x["tiers"].index((blocks, bonus)) - 1][0]
+            s = f"Qulf · {prev_tier:.0f} blokka chiqqach ochiladi"
+            scol = MUTED
+        c.d.text((PAD + 80, c.y + 34), s, font=_font(22), fill=scol)
+        c.y += 84
+        c.d.line([(PAD + 80, c.y - 8), (W - PAD, c.y - 8)], fill=HAIR, width=1)
+
     c.footer("Bonus faqat yetkazilgan va qaytmagan mahsulotga to'lanadi.")
     return c.png()
 
 
 # ==================================================================
-# 4. ERTALABKI QARZ/VAZVRAT
+# 4. ERTALABKI QARZ/VAZVRAT — hamma do'kon raqamli
 # ==================================================================
 
 def render_morning_card(x: dict) -> bytes:
     c = Card()
     c.header("ertalabki hisobot", x["date_label"], x["name"], x["league_label"])
 
-    c.section("Kecha kelgan vazvratlar")
+    c.section("Kecha kelgan vazvratlar", icon="return")
     if x["returns"]:
-        for shop, summa in x["returns"][:6]:
-            c.list_row(shop, fmt(summa), right_color=BAD)
-        c.row("Jami vazvrat", f"−{fmt(x['returns_total'])}", value_color=BAD, divider=False)
+        for i, (shop, summa) in enumerate(x["returns"], 1):
+            c.numbered_row(i, shop, f"−{fmt(summa)}", amount_color=RED)
+        c.row("Jami vazvrat", f"−{fmt(x['returns_total'])}", value_color=RED, divider=False)
     else:
-        c.row("Vazvrat", "yo'q", value_color=OK, divider=False)
+        c.row("Vazvrat", "yo'q", value_color=GREEN, divider=False)
     if x.get("ball_note"):
-        c.callout(x["ball_note"], "warn", label="BALL O'ZGARDI")
+        c.callout(x["ball_note"], "warn", label="BALL O'ZGARDI", icon="debt")
 
-    c.section("Qarz qoldig'i")
-    for shop, summa, age in x["debts"][:7]:
-        age_txt = f"· {age} kun" if age else ""
-        c.list_row(shop, fmt(summa), sub=age_txt,
-                   sub_color=(BAD if (age or 0) >= 10 else MUTED))
-    if x.get("debt_more"):
-        c.row(f"yana {x['debt_more']} ta do'kon", "", divider=False)
+    c.section("Qarz — 50 000 so'mdan yuqori barcha do'konlar", icon="debt")
+    debts = x.get("debts_all", x["debts"])
+    for i, (shop, summa, age) in enumerate(debts, 1):
+        age_txt = f"{age} kun" if age else ""
+        c.numbered_row(i, shop, fmt(summa), sub=age_txt)
     frac = x["debt_total"] / x["debt_limit"] if x["debt_limit"] else 0
-    col = OK if frac <= 0.8 else (WARN if frac <= 1 else BAD)
-    c.bar_row(f"Limit {fmt(x['debt_limit'])}", frac, f"{frac*100:.0f}%", fill=col, divider=False)
-    c.footer("Eng eski qarz qizil bilan. To'liq ro'yxat — «Qarz» tugmasida.")
+    col = GREEN if frac <= 0.8 else RED
+    c.gap(4)
+    c.row("Jami qarz", f"{fmt(x['debt_total'])}  /  limit {fmt(x['debt_limit'])}",
+          value_color=col, divider=False)
+    c.bar("Limit to'ldi", frac, f"{frac*100:.0f}%", fill=col)
+    c.footer("Eng eski qarz (10+ kun) qizil bilan belgilanadi.")
     return c.png()
 
 
@@ -506,13 +584,13 @@ def render_morning_card(x: dict) -> bytes:
 def render_group_daily(x: dict) -> bytes:
     c = Card()
     c.header("kunlik ballar", x["date_label"], x["league_label"],
-             "Bugungi natijalar · ball teng bo'lsa summa hal qiladi")
+             "Bugungi natijalar · ball teng bo'lsa savdo hal qiladi")
     for i, (name, ball, sales) in enumerate(x["rows"], 1):
         bg, fg = ball_pill(ball)
         c.rank_row(str(i), name, f"{ball} ball", bg, fg, tail=fmt(sales))
     c.gap(6)
     if x.get("streak_note"):
-        c.callout(x["streak_note"], "lime", label="SERIYA")
+        c.callout(x["streak_note"], "pink", label="SERIYA", icon="trophy")
     c.footer("Oylik yig'indi maxfiy — g'oliblar oy yakunida e'lon qilinadi.")
     return c.png()
 
@@ -523,43 +601,40 @@ def render_group_daily(x: dict) -> bytes:
 
 def render_admin_summary(x: dict) -> bytes:
     c = Card()
-    logo = _logo(56)
+    logo = _logo(52)
     if logo is not None:
         c.img.paste(logo, (PAD, c.y), logo)
-    fk = _font(23, bold=True)
-    c.d.text((PAD + (logo.width + 20 if logo else 0), c.y + 4),
-             x["title"].upper(), font=fk, fill=PINK_LT)
-    dw = c.d.textlength(x["date_label"], font=fk)
-    c.d.text((W - PAD - dw, c.y + 6), x["date_label"], font=fk, fill=SUB)
-    c.y += 76
+    c.d.text((PAD + (logo.width + 18 if logo else 0), c.y + 4),
+             x["title"].upper(), font=_font(23, bold=True), fill=PINK_SOFT)
+    dw = c.d.textlength(x["date_label"], font=_font(23, bold=True))
+    c.d.text((W - PAD - dw, c.y + 6), x["date_label"], font=_font(23, bold=True), fill=SUB)
+    c.y += 72
     c.d.line([(PAD, c.y), (W - PAD, c.y)], fill=EDGE, width=2)
     c.gap(16)
 
-    cols = [(PAD, "Agent"), (452, "Savdo"), (642, "Ball"), (742, "Plan"),
-            (858, "Toy"), (958, "Qarz")]
+    cols = [(PAD, "Agent"), (446, "Savdo"), (636, "Ball"), (736, "Reja"),
+            (852, "Toy"), (952, "Qarz")]
     for cx, label in cols:
-        c.d.text((cx, c.y), label.upper(), font=_font(20, bold=True), fill=MUTED)
-    c.y += 36
-    c._hair()
+        c.d.text((cx, c.y), label.upper(), font=_font(19, bold=True), fill=MUTED)
+    c.y += 34
+    c.d.line([(PAD, c.y), (W - PAD, c.y)], fill=HAIR, width=1)
     c.gap(8)
-
-    fn, fv = _font(27, bold=True), _font(26)
     for name, sales, ball, plan_pct, toy, debt_mln, frac in x["rows"]:
-        c.d.text((PAD, c.y), name[:20], font=fn, fill=(237, 243, 250))
-        c.d.text((452, c.y + 1), fmt(sales), font=fv, fill=(BAD if sales == 0 else (214, 224, 236)))
-        c.d.text((642, c.y + 1), str(ball), font=fv, fill=(214, 224, 236))
-        pcol = OK if plan_pct >= 80 else (WARN if plan_pct >= 50 else BAD)
-        c.d.text((742, c.y + 1), f"{plan_pct:.0f}%", font=fv, fill=pcol)
-        c.d.text((858, c.y + 1), f"{toy:.0f}", font=fv, fill=(214, 224, 236))
-        dcol = BAD if frac > 1 else (WARN if frac >= 0.9 else (214, 224, 236))
-        c.d.text((958, c.y + 1), f"{debt_mln:.1f}", font=fv, fill=dcol)
-        c.y += 48
-        c._hair()
+        c.d.text((PAD, c.y), name[:20], font=_font(26, bold=True), fill=(237, 243, 250))
+        c.d.text((446, c.y + 1), fmt(sales), font=_font(25), fill=(RED if sales == 0 else (214, 224, 236)))
+        c.d.text((636, c.y + 1), str(ball), font=_font(25), fill=(214, 224, 236))
+        pcol = GREEN if plan_pct >= 80 else (WHITE if plan_pct >= 50 else RED)
+        c.d.text((736, c.y + 1), f"{plan_pct:.0f}%", font=_font(25), fill=pcol)
+        c.d.text((852, c.y + 1), f"{toy:.0f}", font=_font(25), fill=(214, 224, 236))
+        dcol = RED if frac > 1 else (WHITE if frac < 0.9 else PINK_SOFT)
+        c.d.text((952, c.y + 1), f"{debt_mln:.1f}", font=_font(25), fill=dcol)
+        c.y += 46
+        c.d.line([(PAD, c.y - 4), (W - PAD, c.y - 4)], fill=HAIR, width=1)
     c.gap(12)
-
     for level, text in x.get("signals", []):
-        c.callout(text, "warn" if level != "info" else "ok", label="")
-    c.footer("Qarz — mln so'mda (90%+ sariq, oshgan qizil).")
+        c.callout(text, "red" if level == "bad" else ("warn" if level == "warn" else "ok"),
+                  label="", icon="debt" if level != "info" else "check")
+    c.footer("Qarz — mln so'mda (limitga yaqin pushti, oshgan qizil).")
     return c.png()
 
 
@@ -570,32 +645,31 @@ def render_admin_summary(x: dict) -> bytes:
 def render_month_final(x: dict) -> bytes:
     c = Card()
     c.header(f"{x['month_label']} yakuni", "G'OLIBLAR", x["league_label"],
-             "Oy bo'yi maxfiy saqlangan yig'indi — mana natija!", accent=GOLD)
-
+             "Oy bo'yi maxfiy saqlangan yig'indi — mana natija!")
     medals = {1: GOLD, 2: (200, 208, 220), 3: (222, 156, 96)}
     for place, name, total_ball, over, prize in x["podium"]:
         col = medals.get(place, SUB)
-        c.d.text((PAD, c.y), f"{place}-o'rin", font=_font(35, bold=True), fill=col)
-        c.d.text((PAD + 196, c.y), name, font=_font(35, bold=True),
-                 fill=(255, 255, 255) if place == 1 else (226, 234, 243))
+        icons.draw(c.d, "trophy", PAD + 16, c.y + 22, 16, col, 3)
+        c.d.text((PAD + 48, c.y), f"{place}-o'rin", font=_font(32, bold=True), fill=col)
+        c.d.text((PAD + 210, c.y), name, font=_font(32, bold=True),
+                 fill=WHITE if place == 1 else (226, 234, 243))
         tail = f"{total_ball} ball (+{over})  ·  {fmt(prize)}"
-        ft = _font(27, bold=True)
+        ft = _font(26, bold=True)
         tw = c.d.textlength(tail, font=ft)
-        c.d.text((W - PAD - tw, c.y + 5), tail, font=ft,
-                 fill=LIME if place == 1 else (202, 214, 227))
-        c.y += 64
-        c._hair()
-        c.gap(6)
+        c.d.text((W - PAD - tw, c.y + 4), tail, font=ft, fill=PINK_SOFT if place == 1 else (202, 214, 227))
+        c.y += 60
+        c.d.line([(PAD, c.y - 2), (W - PAD, c.y - 2)], fill=HAIR, width=1)
+        c.gap(8)
     if not x["podium"]:
-        c.row("Podium", "bu oy plandan oshgan agent yo'q", value_color=WARN, divider=False)
+        c.row("Podium", "bu oy rejadan oshgan agent yo'q", value_color=RED, divider=False)
 
     c.section("Qo'shimcha sovrinlar")
     if x.get("growth"):
         gn, gp, gpr = x["growth"]
-        c.row("Eng zo'r o'sish", f"{gn} · +{gp:.0f}% · {fmt(gpr)}", value_color=OK)
+        c.row("Eng zo'r o'sish", f"{gn} · +{gp:.0f}% · {fmt(gpr)}", value_color=GREEN)
     for name, blocks, bonus in x.get("toy_winners", []):
         c.row(f"Happy Toy · {name}", f"{blocks:.0f} blok · {fmt(bonus)}",
-              value_color=LIME, divider=False)
+              value_color=PINK_SOFT, divider=False)
 
     c.callout(x.get("note", "Yangi oy — yangi o'yin: hamma noldan boshlaydi!"), "pink", label="")
     c.footer("Vazvratlar hisobga olingan yakuniy natija. 1-o'rin ketma-ket 2 oy berilmaydi.")

@@ -81,8 +81,8 @@ def money_risks(
             kind="toy",
             amount=toy.next_tier_bonus or 0,
             action=(
-                f"Toy'ga bos — {toy.blocks_to_next:.0f} blok qoldi "
-                f"(kuniga {per_day:.1f} blok)"
+                f"Happy Toy soting — bonusgacha {toy.blocks_to_next:.0f} blok qoldi "
+                f"(kuniga {per_day:.1f} blok soting)"
             ),
             ease=per_day,
         ))
@@ -102,8 +102,8 @@ def money_risks(
                 kind="kpi_bonus",
                 amount=extra,
                 action=(
-                    f"Plan pog'onasiga {need_sum:,.0f} so'm qoldi "
-                    f"(kuniga {per_day:,.0f})".replace(",", " ")
+                    f"Reja pog'onasiga {need_sum:,.0f} so'm qoldi — kuniga "
+                    f"{per_day:,.0f} so'm savdo qiling".replace(",", " ")
                 ),
                 ease=per_day / 1_000_000,   # mln birlikda solishtirish uchun
             ))
@@ -114,8 +114,8 @@ def money_risks(
             kind="podium",
             amount=min(rules.podium.prizes),
             action=(
-                f"Ball planiga kuniga {proj.ball_per_day_needed:.1f} ball kerak "
-                f"(prognoz: {proj.ball_projected:.0f}/{proj.ball_plan})"
+                f"Reja balliga yetish uchun kuniga {proj.ball_per_day_needed:.1f} ball to'plang "
+                f"(shu sur'atda: {proj.ball_projected:.0f}/{proj.ball_plan})"
             ),
             ease=proj.ball_per_day_needed,
         ))

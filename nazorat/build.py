@@ -75,7 +75,9 @@ class DayContext:
         st = self.rules.statuses_ok
         with get_conn() as conn:
             returns = agent_returns_by_shop(conn, sd_id, yesterday, st)
-            debt_total, debts = agent_debt(conn, sd_id, self.today.isoformat())
+            # 50 000 so'mdan yuqori BARCHA do'konlar (raqamli to'liq ro'yxat)
+            debt_total, debts = agent_debt(conn, sd_id, self.today.isoformat(),
+                                           min_debt=50_000, limit=200)
         returns_total = sum(r[1] for r in returns)
 
         # Vazvrat ballni o'zgartirganmi? (kechagi kun ballini net/brutto solishtir)
@@ -98,8 +100,8 @@ class DayContext:
             "league_label": "Shahar ligasi" if s.league == "city" else "Viloyat ligasi",
             "date_label": f"{self.today.day}-{MONTHS_UZ[self.today.month].upper()}",
             "returns": returns, "returns_total": returns_total, "ball_note": ball_note,
-            "debts": debts, "debt_total": debt_total, "debt_limit": debt_limit,
-            "debt_more": max(len(debts) - 7, 0),
+            "debts": debts, "debts_all": debts, "debt_total": debt_total,
+            "debt_limit": debt_limit,
         }
 
     # ---------- guruh ----------
@@ -126,7 +128,7 @@ class DayContext:
                 else:
                     break
             if cnt >= 3:
-                streak_note = f"Seriya: {s.agent.short} {cnt} kun ketma-ket 4 ball!"
+                streak_note = f"{s.agent.short} {cnt} kun ketma-ket 4 ball to'pladi!"
                 break
 
         return {
