@@ -812,6 +812,68 @@ def render_admin_summary(x: dict) -> bytes:
 
 
 # ==================================================================
+# 8. SUPERVAYZER TABLOSI (strike rate markazda, eng yomondan saralab)
+# ==================================================================
+
+def _strike_color(pct: float):
+    """Strike rate svetofori: >=60 yashil, 45-59 sariq, <45 qizil."""
+    return GREEN if pct >= 60 else (AMBER if pct >= 45 else RED)
+
+
+def render_supervisor_table(x: dict) -> bytes:
+    c = Card()
+    logo = _logo(52)
+    if logo is not None:
+        c.img.paste(logo, (PAD, c.y), logo)
+    c.d.text((PAD + (logo.width + 18 if logo else 0), c.y + 4),
+             x["title"].upper(), font=_font(23, bold=True), fill=PINK_SOFT)
+    dw = c.d.textlength(x["date_label"], font=_font(23, bold=True))
+    c.d.text((W - PAD - dw, c.y + 6), x["date_label"], font=_font(23, bold=True), fill=SUB)
+    c.y += 66
+    c.d.text((PAD, c.y), "STRIKE = KIRGAN DO'KONNING NECHTASI OLDI (eng muhim raqam)",
+             font=_font(17), fill=MUTED)
+    c.y += 30
+    c.d.line([(PAD, c.y), (W - PAD, c.y)], fill=EDGE, width=2)
+    c.gap(14)
+
+    # Ustunlar: Agent | Kirdi/Sotdi | Strike% | Oy savdo | Ball | Reja%
+    cols = [(PAD, "Agent"), (330, "Kirdi/Sotdi"), (600, "Strike"),
+            (760, "Oy savdo"), (940, "Ball")]
+    for cx, label in cols:
+        c.d.text((cx, c.y), label.upper(), font=_font(18, bold=True), fill=MUTED)
+    c.y += 32
+    c.d.line([(PAD, c.y), (W - PAD, c.y)], fill=HAIR, width=1)
+    c.gap(8)
+
+    fn, fv = _font(26, bold=True), _font(25)
+    for r in x["rows"]:
+        scol = _strike_color(r["strike"])
+        c.d.text((PAD, c.y), r["name"][:16], font=fn, fill=(237, 243, 250))
+        c.d.text((330, c.y + 1), f"{r['kirdi']}/{r['sotdi']}", font=fv, fill=(214, 224, 236))
+        # strike — rangli, katta
+        c.d.text((600, c.y - 1), f"{r['strike']:.0f}%", font=_font(27, bold=True), fill=scol)
+        c.d.text((760, c.y + 1), fmt(r["month_sales"]), font=fv, fill=(214, 224, 236))
+        c.d.text((940, c.y + 1), f"{r['ball']}", font=fv, fill=(214, 224, 236))
+        c.y += 46
+        c.d.line([(PAD, c.y - 4), (W - PAD, c.y - 4)], fill=HAIR, width=1)
+    c.gap(10)
+
+    # Liga jami + prognoz
+    _big_tile(c, f"{x['month_label']} — liga jami (shu ketishda oy oxiriga)",
+              f"{fmt(x['league_prognoz'])} so'm", GREEN,
+              sub=f"hozir {fmt(x['league_sales'])}", icon_name="growth")
+
+    # Bugun e'tibor bering
+    if x["focus"]:
+        c.callout("Bugun shu agentlar bilan gaplashing: " + ", ".join(x["focus"]) +
+                  ". Strike rate past — oson do'konga sotib, qolganini tashlab ketyapti.",
+                  "red", label="BUGUN E'TIBOR BERING", icon="flag")
+    c.footer("Strike: <45% qizil, 45-59% sariq, 60%+ yashil. Kirgan do'konning ko'prog'iga "
+             "sotish = 2x ga eng qisqa yo'l.")
+    return c.png()
+
+
+# ==================================================================
 # 7. OY YAKUNI — REVEAL
 # ==================================================================
 

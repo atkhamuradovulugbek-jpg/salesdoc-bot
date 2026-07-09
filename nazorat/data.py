@@ -187,6 +187,19 @@ def agent_visits(conn, sd_id: str, dfrom: str, dto: str) -> tuple[int, int]:
     return int(m or 0), int(t or 0)
 
 
+def agent_strike(conn, sd_id: str, dfrom: str, dto: str) -> tuple[int, int, float]:
+    """Strike rate: (kirgan, sotgan, strike%). Kirgan=visited, sotgan=has_order.
+    Bu — 2x maqsad uchun eng muhim raqam (kirgan do'konning nechtasiga sotdi)."""
+    r = conn.execute("""
+        SELECT COALESCE(SUM(visited),0) kirdi,
+               COALESCE(SUM(CASE WHEN has_order=1 AND visited=1 THEN 1 ELSE 0 END),0) sotdi
+        FROM visits WHERE agent_sd_id=? AND date>=? AND date<=?
+    """, (sd_id, dfrom, dto)).fetchone()
+    kirdi, sotdi = int(r["kirdi"] or 0), int(r["sotdi"] or 0)
+    pct = (sotdi / kirdi * 100) if kirdi else 0.0
+    return kirdi, sotdi, pct
+
+
 # ------------------------------------------------------------------
 # Bitta agent uchun to'liq hisob (barcha kartalar shundan chizadi)
 # ------------------------------------------------------------------

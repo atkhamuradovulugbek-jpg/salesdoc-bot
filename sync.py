@@ -129,8 +129,10 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
         await progress(f"🏭 Ombor qoldiqlari tortilmoqda...")
         warehouses = await api.get_stock();   logger.info("✓ warehouses: %d", len(warehouses))
 
-        await progress(f"🚶 Bugungi vizitlar tortilmoqda...")
-        visits = await api.get_visits(today, today); logger.info("✓ visits: %d", len(visits))
+        await progress(f"🚶 Vizitlar tortilmoqda...")
+        # Shu oy boshidan — strike rate (kirgan/sotgan) oylik hisoblanishi uchun.
+        visit_from = date.today().replace(day=1).isoformat()
+        visits = await api.get_visits(visit_from, today); logger.info("✓ visits: %d", len(visits))
 
         if mode == "full":
             await progress(f"🏪 Mijozlar tortilmoqda... <i>(ko'p ma'lumot)</i>")
