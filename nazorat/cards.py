@@ -252,13 +252,17 @@ class Card:
             self.gap(8)
 
     def section(self, label, icon=None):
-        self.gap(8)
-        x = PAD
+        # Sarlavha aniq ajralib tursin: nozik fon-strip + pushti ikonka + yorqinroq matn
+        self.gap(12)
+        strip_h = 40
+        self.d.rounded_rectangle([PAD, self.y, W - PAD, self.y + strip_h], 9, fill=TILE)
+        self.d.rounded_rectangle([PAD, self.y + 8, PAD + 6, self.y + strip_h - 8], 3, fill=PINK)
+        x = PAD + 22
         if icon:
-            icons.draw(self.d, icon, PAD + 10, self.y + 10, 12, MUTED, 2)
-            x = PAD + 34
-        self.d.text((x, self.y), label.upper(), font=_font(20, bold=True), fill=MUTED)
-        self.y += 38
+            icons.draw(self.d, icon, PAD + 32, self.y + strip_h // 2, 11, PINK_SOFT, 2)
+            x = PAD + 54
+        self.d.text((x, self.y + 10), label.upper(), font=_font(19, bold=True), fill=(210, 220, 232))
+        self.y += strip_h + 12
 
     # --- do'kon-summa raqamli qator ---
 
@@ -455,18 +459,26 @@ def render_ball_card(x: dict) -> bytes:
             c.d.rounded_rectangle([bx, by, bx + fw, by + 16], 8, fill=PINK)
         c.y += h2 + 14
 
-        # KATTA motivatsion qator — "shu sur'atda X ball"
-        reach = x["prognoz_ball"] >= x["ball_plan"]
-        col = GREEN if reach else RED
-        bg = HL_GREEN[0] if reach else HL_RED[0]
-        edge = HL_GREEN[1] if reach else HL_RED[1]
-        hh = 92
-        c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + hh], 16, fill=bg, outline=edge, width=2)
-        icons.draw(c.d, "check" if reach else "flag", PAD + 34, c.y + hh // 2, 16, col, 4)
-        c.d.text((PAD + 72, c.y + 20), "SHU SUR'ATDA DAVOM ETSANGIZ", font=_font(19, bold=True), fill=col)
-        c.d.text((PAD + 72, c.y + 44), f"{x['prognoz_ball']:.0f} ball to'playsiz",
-                 font=_font(38, bold=True), fill=col)
-        c.y += hh + 14
+        # KATTA motivatsion banner — trayektoriya asosida (qayerga ketyapsiz)
+        prog = x["prognoz_ball"]
+        plan = x["ball_plan"]
+        gap_ball = plan - prog
+        per_day = x.get("per_day_needed", 0)
+        prog_pct = (prog / plan * 100) if plan else 0
+        if prog_pct >= 100:      # YASHIL — rejadan oshadi
+            scheme, label = "green", "ZO'R KETYAPSIZ"
+            msg = (f"Shu sur'atda {prog:.0f} ball to'playsiz — rejadan {prog - plan:.0f} ball "
+                   f"ko'p! Yana kuchaytirsangiz podium tepasiga chiqasiz.")
+        elif prog_pct >= 70:     # SARIQ — reja yaqin, oz qoldi
+            scheme, label = "warn", "REJAGA YAQINSIZ"
+            msg = (f"Shu sur'atda {prog:.0f} ball — rejaga {gap_ball:.0f} ball qoldi. "
+                   f"Kuniga atigi {per_day:.1f} ball qo'shsangiz rejaga yetasiz!")
+        else:                    # QIZIL — ogohlantirish
+            scheme, label = "red", "OGOHLANTIRISH — REJADAN ORQADASIZ"
+            msg = (f"Shu sur'atda faqat {prog:.0f} ball — rejadan {gap_ball:.0f} ball kam! "
+                   f"Bu ketishda sovrindan quruq qolasiz. Kuniga {per_day:.1f} ball qo'shing.")
+        c.callout(msg, scheme, label=label,
+                  icon=("sales" if prog_pct >= 100 else ("target" if prog_pct >= 70 else "flag")))
     else:
         c.month_panel(x["month_ball"], x["ball_plan"], x["prognoz_ball"], observe=True)
 
