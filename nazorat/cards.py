@@ -459,26 +459,32 @@ def render_ball_card(x: dict) -> bytes:
             c.d.rounded_rectangle([bx, by, bx + fw, by + 16], 8, fill=PINK)
         c.y += h2 + 14
 
-        # KATTA motivatsion banner — trayektoriya asosida (qayerga ketyapsiz)
+        # KATTA banner — "shu sur'atda X ball" + tagida trayektoriya izohi
         prog = x["prognoz_ball"]
         plan = x["ball_plan"]
         gap_ball = plan - prog
         per_day = x.get("per_day_needed", 0)
         prog_pct = (prog / plan * 100) if plan else 0
-        if prog_pct >= 100:      # YASHIL — rejadan oshadi
-            scheme, label = "green", "ZO'R KETYAPSIZ"
-            msg = (f"Shu sur'atda {prog:.0f} ball to'playsiz — rejadan {prog - plan:.0f} ball "
-                   f"ko'p! Yana kuchaytirsangiz podium tepasiga chiqasiz.")
-        elif prog_pct >= 70:     # SARIQ — reja yaqin, oz qoldi
-            scheme, label = "warn", "REJAGA YAQINSIZ"
-            msg = (f"Shu sur'atda {prog:.0f} ball — rejaga {gap_ball:.0f} ball qoldi. "
-                   f"Kuniga atigi {per_day:.1f} ball qo'shsangiz rejaga yetasiz!")
-        else:                    # QIZIL — ogohlantirish
-            scheme, label = "red", "OGOHLANTIRISH — REJADAN ORQADASIZ"
-            msg = (f"Shu sur'atda faqat {prog:.0f} ball — rejadan {gap_ball:.0f} ball kam! "
-                   f"Bu ketishda sovrindan quruq qolasiz. Kuniga {per_day:.1f} ball qo'shing.")
-        c.callout(msg, scheme, label=label,
-                  icon=("sales" if prog_pct >= 100 else ("target" if prog_pct >= 70 else "flag")))
+        if prog_pct >= 100:      # YASHIL
+            col, bg, edge = GREEN, HL_GREEN[0], HL_GREEN[1]
+            note = f"Rejadan {prog - plan:.0f} ball ko'p — yana kuchaytirsangiz podium tepasiga chiqasiz!"
+        elif prog_pct >= 70:     # SARIQ
+            col, bg, edge = AMBER, _mix(BG, AMBER, 0.10), _mix(BG, AMBER, 0.32)
+            note = f"Rejaga {gap_ball:.0f} ball yetmayapti — kuniga {per_day:.1f} ball qo'shsangiz yetasiz!"
+        else:                    # QIZIL
+            col, bg, edge = RED, HL_RED[0], HL_RED[1]
+            note = f"Rejaga {gap_ball:.0f} ball yetmayapti — bu ketishda sovrindan quruq qolasiz! Kuniga {per_day:.1f} ball qo'shing."
+        note_lines = c._wrap(_san(note), _font(22), W - PAD - (PAD + 72) - 20)
+        hh = 96 + len(note_lines) * 30 + 16
+        c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + hh], 16, fill=bg, outline=edge, width=2)
+        icons.draw(c.d, "flag", PAD + 34, c.y + 52, 16, col, 4)
+        c.d.text((PAD + 72, c.y + 20), "SHU SUR'ATDA DAVOM ETSANGIZ", font=_font(19, bold=True), fill=col)
+        c.d.text((PAD + 72, c.y + 44), f"{prog:.0f} ball to'playsiz", font=_font(38, bold=True), fill=col)
+        ty = c.y + 96
+        for ln in note_lines:
+            c.d.text((PAD + 72, ty), ln, font=_font(22), fill=col)
+            ty += 30
+        c.y += hh + 14
     else:
         c.month_panel(x["month_ball"], x["ball_plan"], x["prognoz_ball"], observe=True)
 
