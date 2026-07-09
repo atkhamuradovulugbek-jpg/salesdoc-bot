@@ -879,6 +879,31 @@ def render_supervisor_monthly(x: dict) -> bytes:
     return c.png()
 
 
+def render_supervisor_debt(x: dict) -> bytes:
+    """ERTALABKI: Agent | Qarz | Vazvrat(oy) | Vazvrat% — eng katta qarz yuqorida."""
+    c = Card()
+    _sup_header(c, x["title"], x["date_label"],
+                "Ertalabki nazorat · eng katta qarz yuqorida")
+    _sup_cols(c, [(PAD, "Agent"), (420, "Qarz"), (660, "Vazvrat (oy)"), (930, "Vazv%")])
+    fn, fv = _font(25, bold=True), _font(24)
+    for r in x["rows"]:
+        c.d.text((PAD, c.y), r["name"][:14], font=fn, fill=(237, 243, 250))
+        dcol = RED if r["debt"] > r["limit"] else (PINK_SOFT if r["debt"] >= r["limit"] * 0.9 else (214, 224, 236))
+        c.d.text((420, c.y + 1), fmt(r["debt"]), font=fv, fill=dcol)
+        c.d.text((660, c.y + 1), fmt(r["ret"]), font=fv, fill=(214, 224, 236))
+        rcol = GREEN if r["ret_pct"] < 3 else (AMBER if r["ret_pct"] < 6 else RED)
+        c.d.text((930, c.y + 1), f"{r['ret_pct']:.1f}%", font=fv, fill=rcol)
+        c.y += 45
+        c.d.line([(PAD, c.y - 4), (W - PAD, c.y - 4)], fill=HAIR, width=1)
+    c.gap(10)
+    _big_tile(c, "Liga jami qarz", f"{fmt(x['league_debt'])} so'm", RED, icon_name="debt")
+    _big_tile(c, "Liga jami vazvrat (oy)", f"{fmt(x['league_ret'])} so'm", RED, icon_name="return")
+    for level, text in x.get("signals", []):
+        c.callout(text, "red" if level == "bad" else "warn", label="", icon="debt")
+    c.footer("Qarz: limitdan oshgan qizil, yaqin pushti. Vazvrat%: <3 yashil, 3-6 sariq, 6+ qizil.")
+    return c.png()
+
+
 def render_supervisor_daily(x: dict) -> bytes:
     """KUNLIK: Agent | Bugun savdo | Ball | Toy | Kirdi/Sotdi — eng ko'p sotgan yuqorida."""
     c = Card()

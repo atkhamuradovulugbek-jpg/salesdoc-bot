@@ -229,6 +229,44 @@ class DayContext:
             "focus": focus, "month_label": MONTHS_UZ[self.today.month],
         }
 
+    def supervisor_debt(self, league: str) -> dict:
+        """ERTALABKI supervayzer jadvali: har agent — qarz jami, oylik vazvrat."""
+        dfrom = self.month_first_iso()
+        dto = self.today.isoformat()
+        st = self.rules.statuses_ok
+        fs = self.rules.status_full_return
+        rows = []
+        league_debt = league_ret = 0.0
+        signals = []
+        with get_conn() as conn:
+            for s in self.by_league[league]:
+                if s.agent.observe_only:
+                    continue
+                m_partial, m_full = agent_returns_month(conn, s.agent.sd_id, dfrom, dto, st, fs)
+                ret = m_partial + m_full
+                debt = s.debt_total
+                limit = s.agent.debt_limit or self.rules.debt_limit[league]
+                ret_pct = (ret / s.month_sales * 100) if s.month_sales else 0
+                league_debt += debt
+                league_ret += ret
+                rows.append({
+                    "name": s.agent.short, "debt": debt, "limit": limit,
+                    "ret": ret, "ret_pct": ret_pct,
+                })
+                if debt > limit:
+                    signals.append(("bad", f"{s.agent.short}: qarz limitdan oshdi "
+                                           f"({debt/1e6:.1f} / {limit/1e6:.0f} mln)"))
+                elif debt >= limit * 0.9:
+                    signals.append(("warn", f"{s.agent.short}: qarz limitga yaqin "
+                                            f"({debt/1e6:.1f} / {limit/1e6:.0f} mln)"))
+        rows.sort(key=lambda r: -r["debt"])
+        return {
+            "title": f"supervayzer · qarz-vazvrat · {self._league_label2(league)}",
+            "date_label": f"{self.today.day}-{MONTHS_UZ[self.today.month].upper()}",
+            "rows": rows, "league_debt": league_debt, "league_ret": league_ret,
+            "signals": signals,
+        }
+
     def supervisor_daily(self, league: str) -> dict:
         """KUNLIK supervayzer jadvali: bugungi savdo, ball, toy, vizit (kirdi/oldi)."""
         day = self.today.isoformat()
