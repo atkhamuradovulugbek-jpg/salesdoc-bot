@@ -15,7 +15,7 @@ from .core.podium import PodiumEntry, daily_rating, rank_podium
 from .core.rules import Rules, load_agents, load_rules
 from .data import (AgentSnapshot, MONTHS_UZ, agent_debt, agent_full_returns_by_shop,
                    agent_month_net_sales, agent_returns_by_shop, agent_returns_month,
-                   agent_strike)
+                   agent_strike, agent_toy_day)
 
 
 def prev_month(today: date) -> tuple[int, int]:
@@ -196,14 +196,14 @@ class DayContext:
 
     # ---------- supervayzer tablosi (strike rate markazda) ----------
 
-    def supervisor_table(self, league: str) -> dict:
-        """
-        Supervayzer kechki tablosi — konsul tavsiyasi bo'yicha:
-        strike rate (kirgan/sotgan) markazda, eng yomondan saralab.
-        """
+    def _league_label2(self, league: str) -> str:
+        return "shahar" if league == "city" else "viloyat"
+
+    def supervisor_monthly(self, league: str) -> dict:
+        """OYLIK supervayzer jadvali: strike, oy savdo, prognoz, ball, toy. Eng yomondan."""
         dfrom = self.month_first_iso()
         dto = self.today.isoformat()
-        st = self.rules.statuses_ok
+        wd_p, wd_t = self.wd_passed_val(), self.wd_total_val()
         rows = []
         league_sales = league_prognoz = 0.0
         with get_conn() as conn:
@@ -211,29 +211,47 @@ class DayContext:
                 if s.agent.observe_only:
                     continue
                 kirdi, sotdi, strike = agent_strike(conn, s.agent.sd_id, dfrom, dto)
-                sales_plan = self.rules.monthly_sales_plan[league]
-                plan_pct = s.month_sales / sales_plan * 100 if sales_plan else 0
-                daily_avg = s.month_sales / self.wd_passed_val() if self.wd_passed_val() else 0
-                prognoz = daily_avg * self.wd_total_val()
+                prognoz = (s.month_sales / wd_p * wd_t) if wd_p else 0
                 league_sales += s.month_sales
                 league_prognoz += prognoz
                 rows.append({
-                    "name": s.agent.short, "kirdi": kirdi, "sotdi": sotdi, "strike": strike,
-                    "month_sales": s.month_sales, "ball": s.month_ball,
-                    "ball_plan": s.agent.ball_plan, "plan_pct": plan_pct,
+                    "name": s.agent.short, "strike": strike,
+                    "month_sales": s.month_sales, "prognoz": prognoz,
+                    "ball": s.month_ball, "ball_plan": s.agent.ball_plan,
                     "toy": s.toy_blocks,
                 })
-        # Eng yomon strike rate — yuqorida
         rows.sort(key=lambda r: r["strike"])
-        # "Bugun e'tibor bering" — eng zaif 2-3 agent
         focus = [f"{r['name']} (strike {r['strike']:.0f}%)" for r in rows[:3] if r["strike"] < 45]
         return {
-            "title": f"supervayzer · {'shahar' if league == 'city' else 'viloyat'}",
+            "title": f"supervayzer · oylik · {self._league_label2(league)}",
             "date_label": f"{self.today.day}-{MONTHS_UZ[self.today.month].upper()}",
-            "rows": rows,
-            "league_sales": league_sales, "league_prognoz": league_prognoz,
-            "focus": focus,
-            "month_label": MONTHS_UZ[self.today.month],
+            "rows": rows, "league_sales": league_sales, "league_prognoz": league_prognoz,
+            "focus": focus, "month_label": MONTHS_UZ[self.today.month],
+        }
+
+    def supervisor_daily(self, league: str) -> dict:
+        """KUNLIK supervayzer jadvali: bugungi savdo, ball, toy, vizit (kirdi/oldi)."""
+        day = self.today.isoformat()
+        st = self.rules.statuses_ok
+        sku = self.rules.toy.sku_ids
+        rows = []
+        league_today = 0.0
+        with get_conn() as conn:
+            for s in self.by_league[league]:
+                if s.agent.observe_only:
+                    continue
+                kirdi, sotdi, _ = agent_strike(conn, s.agent.sd_id, day, day)
+                toy_day = agent_toy_day(conn, s.agent.sd_id, day, sku, st)
+                league_today += s.today_sales
+                rows.append({
+                    "name": s.agent.short, "sales": s.today_sales, "ball": s.today_ball,
+                    "toy": toy_day, "kirdi": kirdi, "sotdi": sotdi,
+                })
+        rows.sort(key=lambda r: -r["sales"])   # bugun eng ko'p sotgan yuqorida
+        return {
+            "title": f"supervayzer · kunlik · {self._league_label2(league)}",
+            "date_label": f"{self.today.day}-{MONTHS_UZ[self.today.month].upper()}",
+            "rows": rows, "league_today": league_today,
         }
 
     def wd_passed_val(self) -> int:

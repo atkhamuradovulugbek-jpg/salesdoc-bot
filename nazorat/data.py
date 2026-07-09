@@ -187,6 +187,20 @@ def agent_visits(conn, sd_id: str, dfrom: str, dto: str) -> tuple[int, int]:
     return int(m or 0), int(t or 0)
 
 
+def agent_toy_day(conn, sd_id: str, day: str, sku_ids: list[str],
+                  statuses: list[int]) -> float:
+    """Berilgan kundagi sotilgan Toy bloklar (kunlik supervayzer jadvali uchun)."""
+    ph_s = ",".join("?" * len(statuses))
+    ph_k = ",".join("?" * len(sku_ids))
+    r = conn.execute(f"""
+        SELECT COALESCE(SUM(oi.block),0) b FROM order_items oi
+        JOIN orders o ON o.sd_id = oi.order_sd_id
+        WHERE o.agent_sd_id=? AND o.date=? AND o.status IN ({ph_s})
+          AND oi.product_sd_id IN ({ph_k})
+    """, (sd_id, day, *statuses, *sku_ids)).fetchone()
+    return float(r["b"] or 0)
+
+
 def agent_strike(conn, sd_id: str, dfrom: str, dto: str) -> tuple[int, int, float]:
     """Strike rate: (kirgan, sotgan, strike%). Kirgan=visited, sotgan=has_order.
     Bu — 2x maqsad uchun eng muhim raqam (kirgan do'konning nechtasiga sotdi)."""

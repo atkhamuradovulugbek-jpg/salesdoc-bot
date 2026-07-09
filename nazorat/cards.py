@@ -820,56 +820,87 @@ def _strike_color(pct: float):
     return GREEN if pct >= 60 else (AMBER if pct >= 45 else RED)
 
 
-def render_supervisor_table(x: dict) -> bytes:
-    c = Card()
+def fmt_mln(n: float) -> str:
+    """23148750 → '23.1M' (zich jadval uchun)."""
+    return f"{n / 1_000_000:.1f}M"
+
+
+def _sup_header(c, title, date_label, subtitle):
     logo = _logo(52)
     if logo is not None:
         c.img.paste(logo, (PAD, c.y), logo)
     c.d.text((PAD + (logo.width + 18 if logo else 0), c.y + 4),
-             x["title"].upper(), font=_font(23, bold=True), fill=PINK_SOFT)
-    dw = c.d.textlength(x["date_label"], font=_font(23, bold=True))
-    c.d.text((W - PAD - dw, c.y + 6), x["date_label"], font=_font(23, bold=True), fill=SUB)
-    c.y += 66
-    c.d.text((PAD, c.y), "STRIKE = KIRGAN DO'KONNING NECHTASI OLDI (eng muhim raqam)",
-             font=_font(17), fill=MUTED)
-    c.y += 30
+             title.upper(), font=_font(22, bold=True), fill=PINK_SOFT)
+    dw = c.d.textlength(date_label, font=_font(22, bold=True))
+    c.d.text((W - PAD - dw, c.y + 6), date_label, font=_font(22, bold=True), fill=SUB)
+    c.y += 62
+    c.d.text((PAD, c.y), subtitle, font=_font(17), fill=MUTED)
+    c.y += 28
     c.d.line([(PAD, c.y), (W - PAD, c.y)], fill=EDGE, width=2)
-    c.gap(14)
+    c.gap(12)
 
-    # Ustunlar: Agent | Kirdi/Sotdi | Strike% | Oy savdo | Ball | Reja%
-    cols = [(PAD, "Agent"), (330, "Kirdi/Sotdi"), (600, "Strike"),
-            (760, "Oy savdo"), (940, "Ball")]
+
+def _sup_cols(c, cols):
     for cx, label in cols:
-        c.d.text((cx, c.y), label.upper(), font=_font(18, bold=True), fill=MUTED)
-    c.y += 32
+        c.d.text((cx, c.y), label.upper(), font=_font(17, bold=True), fill=MUTED)
+    c.y += 30
     c.d.line([(PAD, c.y), (W - PAD, c.y)], fill=HAIR, width=1)
     c.gap(8)
 
-    fn, fv = _font(26, bold=True), _font(25)
+
+def render_supervisor_monthly(x: dict) -> bytes:
+    """OYLIK: Agent | Strike% | Oy savdo | Prognoz | Ball | Toy — eng yomondan."""
+    c = Card()
+    _sup_header(c, x["title"], x["date_label"],
+                "STRIKE = kirgan do'konning nechtasi oldi · eng yomondan saralab")
+    _sup_cols(c, [(PAD, "Agent"), (300, "Strike"), (440, "Oy savdo"),
+                  (620, "Prognoz"), (810, "Ball"), (930, "Toy")])
+    fn, fv = _font(25, bold=True), _font(24)
     for r in x["rows"]:
         scol = _strike_color(r["strike"])
-        c.d.text((PAD, c.y), r["name"][:16], font=fn, fill=(237, 243, 250))
-        c.d.text((330, c.y + 1), f"{r['kirdi']}/{r['sotdi']}", font=fv, fill=(214, 224, 236))
-        # strike — rangli, katta
-        c.d.text((600, c.y - 1), f"{r['strike']:.0f}%", font=_font(27, bold=True), fill=scol)
-        c.d.text((760, c.y + 1), fmt(r["month_sales"]), font=fv, fill=(214, 224, 236))
-        c.d.text((940, c.y + 1), f"{r['ball']}", font=fv, fill=(214, 224, 236))
-        c.y += 46
+        c.d.text((PAD, c.y), r["name"][:14], font=fn, fill=(237, 243, 250))
+        c.d.text((300, c.y - 1), f"{r['strike']:.0f}%", font=_font(26, bold=True), fill=scol)
+        c.d.text((440, c.y + 1), fmt_mln(r["month_sales"]), font=fv, fill=(214, 224, 236))
+        c.d.text((620, c.y + 1), fmt_mln(r["prognoz"]), font=fv, fill=(160, 210, 180))
+        c.d.text((810, c.y + 1), f"{r['ball']}/{r['ball_plan']}", font=fv, fill=(214, 224, 236))
+        c.d.text((930, c.y + 1), f"{r['toy']:.0f}", font=fv, fill=(214, 224, 236))
+        c.y += 45
         c.d.line([(PAD, c.y - 4), (W - PAD, c.y - 4)], fill=HAIR, width=1)
     c.gap(10)
-
-    # Liga jami + prognoz
     _big_tile(c, f"{x['month_label']} — liga jami (shu ketishda oy oxiriga)",
               f"{fmt(x['league_prognoz'])} so'm", GREEN,
               sub=f"hozir {fmt(x['league_sales'])}", icon_name="growth")
-
-    # Bugun e'tibor bering
     if x["focus"]:
         c.callout("Bugun shu agentlar bilan gaplashing: " + ", ".join(x["focus"]) +
-                  ". Strike rate past — oson do'konga sotib, qolganini tashlab ketyapti.",
+                  ". Strike past — oson do'konga sotib, qolganini tashlab ketyapti.",
                   "red", label="BUGUN E'TIBOR BERING", icon="flag")
-    c.footer("Strike: <45% qizil, 45-59% sariq, 60%+ yashil. Kirgan do'konning ko'prog'iga "
-             "sotish = 2x ga eng qisqa yo'l.")
+    c.footer("Strike: <45% qizil, 45-59% sariq, 60%+ yashil. Savdo — mln so'mda. "
+             "Ball: bajardi/reja.")
+    return c.png()
+
+
+def render_supervisor_daily(x: dict) -> bytes:
+    """KUNLIK: Agent | Bugun savdo | Ball | Toy | Kirdi/Sotdi — eng ko'p sotgan yuqorida."""
+    c = Card()
+    _sup_header(c, x["title"], x["date_label"],
+                "Bugungi natijalar · kirdi/sotdi = nechta do'konga kirdi va nechtasi oldi")
+    _sup_cols(c, [(PAD, "Agent"), (350, "Bugun savdo"), (600, "Ball"),
+                  (710, "Toy"), (840, "Kirdi/Sotdi")])
+    fn, fv = _font(25, bold=True), _font(24)
+    for r in x["rows"]:
+        c.d.text((PAD, c.y), r["name"][:14], font=fn, fill=(237, 243, 250))
+        scol = RED if r["sales"] == 0 else (214, 224, 236)
+        c.d.text((350, c.y + 1), fmt(r["sales"]), font=fv, fill=scol)
+        bcol = GREEN if r["ball"] >= 3 else (AMBER if r["ball"] >= 1 else RED)
+        c.d.text((600, c.y + 1), f"{r['ball']}", font=_font(25, bold=True), fill=bcol)
+        c.d.text((710, c.y + 1), f"{r['toy']:.0f}", font=fv, fill=(214, 224, 236))
+        c.d.text((840, c.y + 1), f"{r['kirdi']}/{r['sotdi']}", font=fv, fill=(214, 224, 236))
+        c.y += 45
+        c.d.line([(PAD, c.y - 4), (W - PAD, c.y - 4)], fill=HAIR, width=1)
+    c.gap(10)
+    _big_tile(c, "Bugun liga jami savdo", f"{fmt(x['league_today'])} so'm", PINK, icon_name="sales")
+    c.footer("Kirdi/Sotdi — masalan 12/5: 12 do'konga kirdi, 5 tasi zakaz berdi. "
+             "Ball: 0 qizil, 1-2 sariq, 3-4 yashil.")
     return c.png()
 
 
