@@ -230,6 +230,15 @@ Railway: `railway status`, `railway logs`, `railway variables`, `railway up`.
 
 ---
 
-**OXIRGI HOLAT:** Barcha kartalar/jadvallar foydalanuvchi bilan ko'rilib tasdiqlashga yaqin.
-Bitta agent (Rano) 5 karta + bitta supervayzer (viloyat) 3 jadval to'liq yuborildi.
-Keyingi qadam: qolgan ish (8-bo'lim) → deploy → 3 kun DRY_RUN sinov.
+**OXIRGI HOLAT (2026-07-09):** ✅ Foydalanuvchi bitta agent (Rano) 5 karta + bitta
+supervayzer (viloyat) 3 jadvalni to'liq ko'rib **"HAMMASI MA'QUL"** dedi. Barcha kartalar
+va jadvallar TASDIQLANDI. Dizayn/hisob bo'yicha boshqa o'zgartirish YO'Q.
+
+**KEYINGI QADAM (to'g'ridan-to'g'ri deploy'ga o'tiladi):**
+1. jobs.py ga supervayzer 3 jadvalni ulash (8-bo'lim, 1-band).
+2. month_end jobini sinash.
+3. Railway Hobby plan + deploy (9-bo'lim). OGOH: asosiy bot start_all.py orqali buzilmasin.
+4. DRY_RUN=true 3 kun sinov → to'g'ri bo'lsa agentlarga ochish.
+
+Foydalanuvchi keyingi chatda "DAVOM.md o'qib davom et" desa: shu holatdan boshla,
+qisqa xulosa ber, RUXSAT so'ra, keyin deploy tayyorgarligini boshla.
