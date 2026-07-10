@@ -236,17 +236,25 @@ Railway: `railway status`, `railway logs`, `railway variables`, `railway up`.
 
 ---
 
-**OXIRGI HOLAT (2026-07-10):** ✅ Barcha kartalar/jadvallar TASDIQLANGAN (foydalanuvchi
-"HAMMASI MA'QUL" degan). ✅ Deploy'dan oldingi KOD ishi TUGADI: supervayzer 3 jadval joblarga
-ulandi (commit 90db828), month_end lokal sinaldi va etaloniga mos. 31 test o'tadi.
-**Hali DEPLOY qilinmagan.** Kod tomondan deploy'ga TAYYOR.
+**OXIRGI HOLAT (2026-07-10):** ✅ **DEPLOY QILINDI — JONLI, DRY_RUN SINOV BOSHLANDI.**
+`railway up` bilan deploy (deployment 4cda769b, ● Online). Launcher ikkala botni ham
+xatosiz ishga tushirdi: asosiy bot (scheduler 03/12/15/20:00, agent nazorati) BUZILMADI,
+nazorat bot "✅ ishga tushdi DRY_RUN=True" (morning 10:00 / evening 20:00 / month_final joblar).
+Ikkalasi startup xabarini adminga yubordi. Xato/conflict yo'q. 31 test o'tadi.
+Kod: supervayzer joblarga ulangan (90db828), month_end etaloniga mos.
 
-**KEYINGI QADAM = DEPLOY (9-bo'lim, foydalanuvchidan kutiladi):**
-1. Railway Hobby plan (Trial tugasa bot o'chadi) — foydalanuvchi ulaydi.
-2. `git push` / `railway up` → Railway 2 botni start_all.py orqali ishga tushiradi.
-   **OGOH:** asosiy bot ham endi start_all.py orqali — buzilmaganini tekshirish.
-3. DRY_RUN=true 3 kun sinov — hammasi adminga; foydalanuvchi SalesDoctor bilan solishtiradi.
-4. To'g'ri bo'lsa DRY_RUN=false → agentlarga kodlar tarqatiladi. Guruh chat ID'lari kerak.
+**HOZIR — DRY_RUN SINOV (1-kun = 2026-07-10):**
+- Nazorat bot har kuni 10:00 (qarz/vazvrat) va 20:00 (ball/reja/toy + supervayzer + admin svodka)
+  hisobotlarni FAQAT adminga (700216613) yuboradi. Birinchi avtomatik kechki hisobot: bugun 20:00.
+- Foydalanuvchi raqamlarni SalesDoctor bilan solishtiradi. Xato bo'lsa → tuzatib qayta deploy.
 
-Foydalanuvchi keyingi chatda "DAVOM.md o'qib davom et" desa: shu holatdan boshla,
-qisqa xulosa ber, RUXSAT so'ra, keyin DEPLOY qadamlarini boshla (Railway plan bormi — so'ra).
+**KEYINGI QADAMLAR:**
+1. ⚠️ **Railway plan tekshirish** — CLI plan turini ko'rsatmaydi; bot hozir Online (funded).
+   Foydalanuvchi dashboard'da (railway.com → billing) Hobby ekanini tasdiqlasin, aks holda
+   trial tugab sinov o'rtasida bot o'chishi mumkin.
+2. 2-3 kun DRY_RUN kuzatuv; hisob to'g'riligini SalesDoctor bilan solishtirish.
+3. To'g'ri bo'lsa DRY_RUN=false (Railway var) → qayta deploy → agentlarga kodlar (TSH-/TVL-)
+   tarqatiladi → agent /start → shaxsiy hisobot. Guruh chat ID'lari (GROUP_CITY/REGION) kerak.
+
+Foydalanuvchi keyingi chatda "DAVOM.md o'qib davom et" desa: JONLI holatdan boshla —
+loglarni tekshir (railway logs), sinov qanday ketayotganini so'ra, raqam xatosi bo'lsa tuzat.
