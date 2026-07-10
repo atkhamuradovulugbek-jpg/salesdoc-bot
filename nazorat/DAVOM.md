@@ -249,9 +249,8 @@ Kod: supervayzer joblarga ulangan (90db828), month_end etaloniga mos.
 - Foydalanuvchi raqamlarni SalesDoctor bilan solishtiradi. Xato bo'lsa → tuzatib qayta deploy.
 
 **KEYINGI QADAMLAR:**
-1. ⚠️ **Railway plan tekshirish** — CLI plan turini ko'rsatmaydi; bot hozir Online (funded).
-   Foydalanuvchi dashboard'da (railway.com → billing) Hobby ekanini tasdiqlasin, aks holda
-   trial tugab sinov o'rtasida bot o'chishi mumkin.
+1. ✅ **Railway plan TASDIQLANDI (2026-07-10)** — HOBBY plan ("You're on the Hobby Plan",
+   $5/oy kredit, 99.9% availability). Bot uzluksiz ishlaydi, trial xavfi yo'q.
 2. 2-3 kun DRY_RUN kuzatuv; hisob to'g'riligini SalesDoctor bilan solishtirish.
 3. To'g'ri bo'lsa DRY_RUN=false (Railway var) → qayta deploy → agentlarga kodlar (TSH-/TVL-)
    tarqatiladi → agent /start → shaxsiy hisobot. Guruh chat ID'lari (GROUP_CITY/REGION) kerak.
