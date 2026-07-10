@@ -2,7 +2,7 @@
 
 > Bu fayl loyihaning to'liq holatini saqlaydi. Chat tozalangach, Claude shu faylni
 > o'qib, nima qilinganini tushunib, foydalanuvchidan ruxsat so'rab davom etadi.
-> Oxirgi yangilanish: 2026-07-09.
+> Oxirgi yangilanish: 2026-07-10.
 
 ---
 
@@ -184,11 +184,17 @@ Procfile, Dockerfile    — endi `python start_all.py` (asosiy bot ham shu orqal
 
 ## 8. QOLGAN ISH (deploy'dan oldin, Claude bajaradi)
 
-1. **jobs.py ga supervayzer 3 jadvalni ulash** — hozir jobs faqat agent kartalari + admin
-   svodka yuboradi. Supervayzer jadvallari yozilgan (build.py + cards.py) lekin joblarga
-   ulanmagan. DRY_RUN'da adminga ham yuborilsin.
-2. **month_end oy yakuni jobini sinash** (reveal + /tasdiqla).
-3. **Idempotentlik/xato:** qayta ishga tushsa dublikat yo'q, API yotsa faqat adminga.
+1. ✅ **BAJARILDI (2026-07-10)** — jobs.py ga supervayzer 3 jadval ulandi: kechki job —
+   oylik+kunlik, ertalabki job — qarz-vazvrat (liga bo'yicha, idempotent). DRY_RUN yoki
+   supervayzer ulanmagan bo'lsa adminga. storage.chat_for_supervisor() + send_now namunaga
+   ham qo'shildi. Commit 90db828.
+2. ✅ **BAJARILDI (2026-07-10)** — month_end sinaldi (lokal, iyun 2026): hisob etaloniga mos
+   (Bahodir 75/Rano 80/Usmonbek 19), karta to'la ham bo'sh podium ham chiroyli, confirm-oqim
+   ishlaydi. run.py (oy 3-kuni 11:00) + /tasdiqla ulangan. **Topilma:** viloyat iyun podiumi
+   bo'sh (hech kim rejadan +1 oshmagan — Rano aynan 80) — karta "rejadan oshgan agent yo'q"
+   deб ko'rsatadi, o'sish sovrini (Maftuna) saqlanadi. Qoidaga to'g'ri.
+3. **Idempotentlik/xato:** qayta ishga tushsa dublikat yo'q (sent_log — supervayzerga ham
+   qo'llandi), API yotsa faqat adminga. Deploy'dan keyin jonli tekshiriladi.
 4. (Ixtiyoriy) supervayzer buyruq/ulanish — hozircha DRY_RUN'da hammasi adminga.
 
 ## 9. DEPLOY + DRY_RUN REJASI
@@ -230,15 +236,17 @@ Railway: `railway status`, `railway logs`, `railway variables`, `railway up`.
 
 ---
 
-**OXIRGI HOLAT (2026-07-09):** ✅ Foydalanuvchi bitta agent (Rano) 5 karta + bitta
-supervayzer (viloyat) 3 jadvalni to'liq ko'rib **"HAMMASI MA'QUL"** dedi. Barcha kartalar
-va jadvallar TASDIQLANDI. Dizayn/hisob bo'yicha boshqa o'zgartirish YO'Q.
+**OXIRGI HOLAT (2026-07-10):** ✅ Barcha kartalar/jadvallar TASDIQLANGAN (foydalanuvchi
+"HAMMASI MA'QUL" degan). ✅ Deploy'dan oldingi KOD ishi TUGADI: supervayzer 3 jadval joblarga
+ulandi (commit 90db828), month_end lokal sinaldi va etaloniga mos. 31 test o'tadi.
+**Hali DEPLOY qilinmagan.** Kod tomondan deploy'ga TAYYOR.
 
-**KEYINGI QADAM (to'g'ridan-to'g'ri deploy'ga o'tiladi):**
-1. jobs.py ga supervayzer 3 jadvalni ulash (8-bo'lim, 1-band).
-2. month_end jobini sinash.
-3. Railway Hobby plan + deploy (9-bo'lim). OGOH: asosiy bot start_all.py orqali buzilmasin.
-4. DRY_RUN=true 3 kun sinov → to'g'ri bo'lsa agentlarga ochish.
+**KEYINGI QADAM = DEPLOY (9-bo'lim, foydalanuvchidan kutiladi):**
+1. Railway Hobby plan (Trial tugasa bot o'chadi) — foydalanuvchi ulaydi.
+2. `git push` / `railway up` → Railway 2 botni start_all.py orqali ishga tushiradi.
+   **OGOH:** asosiy bot ham endi start_all.py orqali — buzilmaganini tekshirish.
+3. DRY_RUN=true 3 kun sinov — hammasi adminga; foydalanuvchi SalesDoctor bilan solishtiradi.
+4. To'g'ri bo'lsa DRY_RUN=false → agentlarga kodlar tarqatiladi. Guruh chat ID'lari kerak.
 
 Foydalanuvchi keyingi chatda "DAVOM.md o'qib davom et" desa: shu holatdan boshla,
-qisqa xulosa ber, RUXSAT so'ra, keyin deploy tayyorgarligini boshla.
+qisqa xulosa ber, RUXSAT so'ra, keyin DEPLOY qadamlarini boshla (Railway plan bormi — so'ra).
