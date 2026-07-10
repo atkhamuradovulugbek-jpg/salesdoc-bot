@@ -18,7 +18,8 @@ from . import storage
 from .build import DayContext
 from .cards import (render_admin_summary, render_ball_card, render_debt_card,
                     render_group_daily, render_plan_card, render_returns_card,
-                    render_toy_card)
+                    render_supervisor_daily, render_supervisor_debt,
+                    render_supervisor_monthly, render_toy_card)
 from .core.balls import zero_streak
 from .nz_config import ADMIN_IDS, DRY_RUN, GROUP_CITY_CHAT_ID, GROUP_REGION_CHAT_ID
 
@@ -69,6 +70,34 @@ async def _send_agent(app, sd_id: str, photos: list[bytes], day: str, kind: str)
             storage.mark_sent(conn, day, kind, target, _now())
 
 
+# Supervayzer kodlari (liga bo'yicha). Hozircha ulanmagan — v2'da bog'lanadi;
+# shu paytgacha (va DRY_RUN'da) jadvallar adminga tushadi.
+SUPERVISOR_CODES = {"city": "SPV-TSH-01", "region": "SPV-TVL-01"}
+
+
+async def _send_supervisor(app, league: str, photo: bytes, day: str, kind: str):
+    """Supervayzer jadvali. DRY_RUN yoki supervayzer ulanmagan bo'lsa — adminga. Idempotent."""
+    with get_conn() as conn:
+        chat = storage.chat_for_supervisor(conn, SUPERVISOR_CODES.get(league, ""))
+    to_admin = DRY_RUN or not chat
+    target = "admin" if to_admin else str(chat)
+    key = f"sv_{kind}_{league}"
+    with get_conn() as conn:
+        if storage.already_sent(conn, day, key, target):
+            return
+    try:
+        if to_admin:
+            await _admins(app, photo=photo,
+                          text=f"[DRY_RUN] supervayzer {kind} → {league}")
+        else:
+            await app.bot.send_photo(chat, photo)
+    except TelegramError as e:
+        logger.warning("supervayzer %s/%s yuborilmadi: %s", league, kind, e)
+        return
+    with get_conn() as conn:
+        storage.mark_sent(conn, day, key, target, _now())
+
+
 # ==================================================================
 # 10:00 — ertalabki qarz/vazvrat
 # ==================================================================
@@ -99,7 +128,16 @@ async def morning_job(app: Application):
 
     # Adminga ertalabki svodka (qarz/vazvrat bo'yicha eng muhimlari)
     await _admin_morning(app, dc, day)
+
+    # Supervayzerga: qarz-vazvrat jadvali (liga bo'yicha)
+    await _supervisor_morning(app, dc, day)
     logger.info("Ertalabki job tugadi")
+
+
+async def _supervisor_morning(app, dc: DayContext, day: str):
+    for league in ("city", "region"):
+        photo = render_supervisor_debt(dc.supervisor_debt(league))
+        await _send_supervisor(app, league, photo, day, "debt")
 
 
 async def _admin_morning(app, dc: DayContext, day: str):
@@ -137,9 +175,22 @@ async def evening_job(app: Application):
     # Admin: kechki svodka (shahar + viloyat)
     await _admin_evening(app, dc, day)
 
+    # Supervayzerga: oylik (strike markazda) + kunlik jadval (liga bo'yicha)
+    await _supervisor_evening(app, dc, day)
+
     # Ogohlantirishlar (2 kun 0 ball)
     await _alerts(app, dc, day)
     logger.info("Kechki job tugadi")
+
+
+async def _supervisor_evening(app, dc: DayContext, day: str):
+    for league in ("city", "region"):
+        await _send_supervisor(app, league,
+                               render_supervisor_monthly(dc.supervisor_monthly(league)),
+                               day, "monthly")
+        await _send_supervisor(app, league,
+                               render_supervisor_daily(dc.supervisor_daily(league)),
+                               day, "daily")
 
 
 async def _group_daily(app, dc: DayContext, day: str):

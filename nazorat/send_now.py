@@ -15,7 +15,8 @@ from db import get_conn
 from .build import DayContext
 from .cards import (render_admin_summary, render_ball_card, render_debt_card,
                     render_group_daily, render_plan_card, render_returns_card,
-                    render_toy_card)
+                    render_supervisor_daily, render_supervisor_debt,
+                    render_supervisor_monthly, render_toy_card)
 from .nz_config import ADMIN_IDS, NAZORAT_BOT_TOKEN
 from .storage import init_nz_tables
 
@@ -54,6 +55,15 @@ async def main():
                                  caption="Guruhga — kunlik ballar (shahar)")
             await bot.send_photo(aid, render_admin_summary(dc.admin_evening("city")),
                                  caption="Sizga — admin svodka (shahar)")
+
+            await bot.send_message(aid, "🧭 <b>SUPERVAYZERGA — 3 jadval (shahar ligasi)</b>",
+                                   parse_mode="HTML")
+            await bot.send_photo(aid, render_supervisor_monthly(dc.supervisor_monthly("city")),
+                                 caption="Kechqurun 1) Oylik — strike markazda")
+            await bot.send_photo(aid, render_supervisor_daily(dc.supervisor_daily("city")),
+                                 caption="Kechqurun 2) Kunlik natijalar")
+            await bot.send_photo(aid, render_supervisor_debt(dc.supervisor_debt("city")),
+                                 caption="Ertalab 3) Qarz-vazvrat")
             await bot.send_message(aid, "✅ Namuna tugadi. Ma'qul bo'lsa jonli DRY_RUN'ga o'tamiz.")
 
 

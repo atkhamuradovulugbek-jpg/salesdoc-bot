@@ -99,6 +99,16 @@ def chat_for_sd_id(conn: sqlite3.Connection, sd_id: str) -> int | None:
     return row["chat_id"] if row else None
 
 
+def chat_for_supervisor(conn: sqlite3.Connection, code: str) -> int | None:
+    """Supervayzer kodiga bog'langan chat (v2'da ulanadi; ulanmagan bo'lsa None)."""
+    if not code:
+        return None
+    row = conn.execute(
+        "SELECT chat_id FROM nz_bindings WHERE code=? AND role='supervisor'", (code,)
+    ).fetchone()
+    return row["chat_id"] if row else None
+
+
 # ------------------------------------------------------------------
 # Idempotent yuborish jurnali
 # ------------------------------------------------------------------
