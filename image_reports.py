@@ -23,6 +23,8 @@ from reports import (
     DEFAULT_REGION_DAILY_PLAN,
     DEFAULT_REGION_SALES_PLAN,
     DEFAULT_VISIT_PLAN,
+    STOCK_AVG_DAYS,
+    _calc_stock_days,
     classify_agent,
     workdays_in_month,
     workdays_passed,
@@ -838,3 +840,116 @@ def _draw_color_circle(draw: ImageDraw.ImageDraw, cx: int, cy: int, r: int, mark
     if marker == "ultra":
         draw.line([(cx - 11, cy + 2), (cx - 3, cy + 11)], fill=WHITE, width=5)
         draw.line([(cx - 3, cy + 11), (cx + 12, cy - 9)], fill=WHITE, width=5)
+
+
+# ==================================================================
+# «Tez tugaydiganlar» — RASM jadval (matn o'rniga). low_stock_report
+# bilan bir xil ma'lumot; xato bo'lsa bot.py matnga fallback qiladi.
+# ==================================================================
+LOW_STOCK_MAX_ROWS = 30
+LOW_RED_ROW = (255, 214, 214)
+LOW_YELLOW_ROW = (255, 246, 210)
+LOW_RED_CHIP = (224, 60, 68)
+LOW_YELLOW_CHIP = (242, 202, 70)
+LOW_RED_KUN = (170, 30, 40)
+
+
+def _compute_low_stock_items(max_days: int = 5) -> Optional[tuple[list[dict], str]]:
+    """≤ max_days kunlik qoldiq qolgan tovarlar (kritik birinchi). low_stock_report bilan bir xil logika."""
+    with get_conn() as conn:
+        rows = conn.execute(f"""
+            SELECT s.product_sd_id, MAX(s.product_name) AS name, SUM(s.quantity) AS stock,
+                   MAX(s.updated_at) AS upd,
+                   COALESCE((SELECT SUM(oi.quantity) FROM order_items oi
+                             JOIN orders o ON o.sd_id = oi.order_sd_id
+                             WHERE oi.product_sd_id = s.product_sd_id AND o.status IN (1,2,3)
+                               AND o.date >= date('now', '-{STOCK_AVG_DAYS} days')), 0) AS sold
+            FROM stock s GROUP BY s.product_sd_id
+        """).fetchall()
+    items = []
+    for r in rows:
+        stock = float(r["stock"] or 0)
+        days = _calc_stock_days(stock, float(r["sold"] or 0))
+        if days <= max_days:
+            # Shriftda bo'lmasligi mumkin bo'lgan tutuq belgilarini oddiy apostrofga
+            # almashtiramiz (ʻ oʻzbekcha, curly quotes) — quti bo'lib chiqmasligi uchun.
+            nm = r["name"] or "—"
+            for _a, _b in (("ʻ", "'"), ("`", "'"), ("‘", "'"), ("’", "'")):
+                nm = nm.replace(_a, _b)
+            items.append({"name": nm, "stock": stock, "days": days})
+    if not items:
+        return None
+    items.sort(key=lambda x: x["days"])
+    last_updated = max((r["upd"] or "" for r in rows), default="")[:16]
+    return items, last_updated
+
+
+def _draw_low_stock_image(all_items: list[dict], last_updated: str, max_days: int) -> bytes:
+    total = len(all_items)
+    items = all_items[:LOW_STOCK_MAX_ROWS]
+    W, C_NAME, C_QOLDIQ, C_KUN, C_HOLAT = 1560, 780, 300, 230, 250
+    H_TITLE, H_HEADER, H_ROW_MIN, LINE_H, PAD_NAME = 150, 92, 92, 46, 18
+    f_title, f_sub, f_h = _font(40, bold=True), _font(25), _font(32, bold=True)
+    f_name, f_cell = _font(31, bold=True), _font(32, bold=True)
+
+    prepared = []
+    for it in items:
+        full = _wrap_text(it["name"], f_name, C_NAME - 2 * PAD_NAME)
+        if len(full) > 2:
+            lines = full[:2]; lines[1] = lines[1].rstrip() + "…"
+        else:
+            lines = full or [""]
+        prepared.append((lines, it, max(H_ROW_MIN, len(lines) * LINE_H + 36)))
+
+    foot_h = 58 if total > len(items) else 24
+    H = H_TITLE + H_HEADER + sum(rh for _, _, rh in prepared) + foot_h
+    img = Image.new("RGB", (W, H), BG_CREAM)
+    draw = ImageDraw.Draw(img)
+
+    _draw_cell(draw, 0, 0, W, H_TITLE, bg=GREEN_HEADER)
+    _draw_centered_text(draw, "TEZ TUGAYDIGAN MAHSULOTLAR", 0, 18, W, 58, f_title, WHITE)
+    sub = f"{max_days} kun va undan kam qoldiq   ·   jami {total} ta   ·   yangilangan: {last_updated or '—'}"
+    _draw_centered_text(draw, sub, 0, 88, W, 46, f_sub, (212, 226, 212))
+
+    y = H_TITLE
+    for label, w, x0 in [("Tovar nomi", C_NAME, 0), ("Qoldiq", C_QOLDIQ, C_NAME),
+                         ("Necha kun", C_KUN, C_NAME + C_QOLDIQ), ("Holat", C_HOLAT, C_NAME + C_QOLDIQ + C_KUN)]:
+        _draw_cell(draw, x0, y, w, H_HEADER, bg=GREEN_HEADER)
+        _draw_centered_text(draw, label, x0, y, w, H_HEADER, f_h, WHITE)
+    y += H_HEADER
+
+    for lines, it, rh in prepared:
+        days = it["days"]
+        if days < 2:
+            row_bg, chip_bg, chip_tx, chip_lbl, kun_col = LOW_RED_ROW, LOW_RED_CHIP, WHITE, "Qizil", LOW_RED_KUN
+        else:
+            row_bg, chip_bg, chip_tx, chip_lbl, kun_col = LOW_YELLOW_ROW, LOW_YELLOW_CHIP, TEXT_DARK, "Sariq", TEXT_DARK
+        _draw_cell(draw, 0, y, C_NAME, rh, bg=row_bg)
+        ty = y + (rh - len(lines) * LINE_H) // 2
+        for ln in lines:
+            draw.text((PAD_NAME, ty), ln, font=f_name, fill=TEXT_DARK); ty += LINE_H
+        x = C_NAME
+        _draw_cell(draw, x, y, C_QOLDIQ, rh, bg=row_bg)
+        _draw_centered_text(draw, f"{_fmt_int(it['stock'])} blok", x, y, C_QOLDIQ, rh, f_cell, TEXT_DARK)
+        x += C_QOLDIQ
+        _draw_cell(draw, x, y, C_KUN, rh, bg=row_bg)
+        _draw_centered_text(draw, f"{int(round(days))} kun", x, y, C_KUN, rh, f_cell, kun_col)
+        x += C_KUN
+        _draw_cell(draw, x, y, C_HOLAT, rh, bg=chip_bg)
+        _draw_centered_text(draw, chip_lbl, x, y, C_HOLAT, rh, f_cell, chip_tx)
+        y += rh
+
+    if total > len(items):
+        draw.text((24, y + 16), f"Eng kritik {len(items)} tasi ko'rsatildi (jami {total} ta).",
+                  font=f_sub, fill=(120, 110, 80))
+    buf = BytesIO(); img.save(buf, format="PNG", optimize=True)
+    return buf.getvalue()
+
+
+def render_low_stock_table(max_days: int = 5) -> Optional[bytes]:
+    """«Tez tugaydiganlar» uchun PNG jadval. Ma'lumot yo'q bo'lsa None."""
+    computed = _compute_low_stock_items(max_days)
+    if not computed:
+        return None
+    items, last_updated = computed
+    return _draw_low_stock_image(items, last_updated, max_days)
