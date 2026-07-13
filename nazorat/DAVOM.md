@@ -221,7 +221,15 @@ Procfile, Dockerfile    — endi `python start_all.py` (asosiy bot ham shu orqal
 
 - Supervayzer to'liq ulanishi (2 kod: SPV-TSH-01, SPV-TVL-01).
 - Har soatlik GPS "agent do'konga kirdi-kirmadi" nazorati (asosiy botning agent_monitor'ida mexanika bor).
-- Yangi agent (Jumagul o'rniga): birinchi oy "kuzatuv rejimi" (observe_only).
+- ✅ **BAJARILDI (2026-07-14) — Yangi agent / o'rindiq almashinuvi (avtomatik):**
+  `Agent.start_date` (data.py: AgentSnapshot dfrom shu sanadan chegaralanadi — start_date yo'q
+  agentlar O'ZGARISHSIZ). `storage.nz_agent_terms` jadval + `sync_agent_terms` har o'rindiq
+  Sales Doctor ismini kuzatadi; ism o'zgarsa → start_date (oxirgi 3+ kunlik tanaffusdan keyingi
+  1-savdo) + kuzatuv (1-to'liq oy oxirigacha) belgilanadi, adminга xabar. build.py DayContext
+  terms'ni o'qib qo'llaydi (faqat o'qiydi); aniqlash/yozish ertalabki jobda 1 marta. Behruz
+  Eshpo'latov (d0_144, Mirzo Ulug'bek, Jumagul o'rniga) yaml'da: display Behruz, observe_only,
+  start_date 2026-07-10 (oylik savdo 3.5mln — toza). Auto start_date noto'g'ri bo'lsa admin
+  aytadi → yaml'da to'g'rilanadi. 31 test o'tadi.
 
 ---
 
