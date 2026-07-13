@@ -243,6 +243,15 @@ nazorat bot "✅ ishga tushdi DRY_RUN=True" (morning 10:00 / evening 20:00 / mon
 Ikkalasi startup xabarini adminga yubordi. Xato/conflict yo'q. 31 test o'tadi.
 Kod: supervayzer joblarga ulangan (90db828), month_end etaloniga mos.
 
+**TROUBLESHOOTING — "hisobot bo'sh, faqat nomlar, summa yo'q" (2026-07-13 aniqlandi):**
+Sabab: DEPLOY KUNI birinchi hisobot serverdagi baza joriy oy savdosini sync qilishdan OLDIN
+chiqadi → summalar 0. Kod/ko'prik TO'G'RI (data.py oylik savdoni orders.total_after_discount
+dan sana+status bo'yicha oladi). Yechim shart emas: server har kuni 4× sync qiladi
+(03/12/15/20:00) → keyingi kunlar avtomatik to'la. Tekshiruv: `railway logs | grep TO'LIQ`
+(sync "executed successfully" ko'rinishi kerak). Lokalda takrorlash: `run_sync('m','fast')`
+→ `DayContext(today)` → summalar to'la chiqadi. 10-sana bo'sh, 11-12 (dam olish) ko'rilmadi,
+13-sanadan to'la.
+
 **HOZIR — DRY_RUN SINOV (1-kun = 2026-07-10):**
 - Nazorat bot har kuni 10:00 (qarz/vazvrat) va 20:00 (ball/reja/toy + supervayzer + admin svodka)
   hisobotlarni FAQAT adminga (700216613) yuboradi. Birinchi avtomatik kechki hisobot: bugun 20:00.
