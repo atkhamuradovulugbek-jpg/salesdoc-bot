@@ -365,15 +365,23 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
             # Item'larni tozalanadigan sd_id'lar: sana oralig'idagi eskilari +
             # yangi tortilganlari (sanasi oraliqdan tashqarida bo'lsa ham — masalan
             # o'tgan oyda yaratilib shu oyda o'zgargan order'lar).
+            # XAVFSIZLIK (2026-07-13): get_orders BO'SH qaytsa (API HTTP 200 bilan bo'sh
+            # javob — timeout/filtr xatosi), eski buyurtmalarni O'CHIRMAYMIZ. Aks holda
+            # DELETE ishlaydi-yu, yangi INSERT bo'lmaydi → savdo 0 ga tushib, hisobot bo'sh
+            # chiqadi. Faqat yangi buyurtma KELGANDA eskisini almashtiramiz.
+            if not order_rows:
+                logger.warning("⚠️ Buyurtmalar BO'SH qaytdi (%s—%s) — eski ma'lumot SAQLANADI "
+                               "(o'chirilmaydi). Sync manbai vaqtincha javob bermagan bo'lishi mumkin.",
+                               lookback_from, today)
             ids_to_clear = set(old_ids) | set(order_sd_ids)
-            if ids_to_clear:
+            if order_rows and ids_to_clear:
                 ids_list = list(ids_to_clear)
                 CHUNK = 500
                 for i in range(0, len(ids_list), CHUNK):
                     chunk = ids_list[i:i + CHUNK]
                     placeholders = ",".join("?" * len(chunk))
                     conn.execute(f"DELETE FROM order_items WHERE order_sd_id IN ({placeholders})", chunk)
-            if old_ids:
+            if order_rows and old_ids:
                 conn.execute("DELETE FROM orders WHERE date >= ? AND date <= ?", (lookback_from, today))
                 logger.info("⏏ %d ta eski order o'chirildi (sana: %s — %s)", len(old_ids), lookback_from, today)
 
