@@ -142,6 +142,8 @@ Procfile, Dockerfile    — endi `python start_all.py` (asosiy bot ham shu orqal
 - **ERTALAB 10:00 — 2 karta:**
   4. **Qarz** — 50k+ barcha do'kon raqamli + jami/limit.
   5. **Vazvrat** — kunlik to'liq+qisman do'kon-do'kon (aniq sana), oylik to'liq+qisman+jami.
+     **HAR KUNI yuboriladi (2026-07-13 qarori)** — kecha vazvrat bo'lmasa ham "kunlik yo'q" +
+     oylik jamini ko'rsatadi (avval faqat kecha vazvrat bo'lganda yuborilardi).
 - Buyruqlar: /bugun /oy /toy /qarz /vazvrat /yordam.
 
 ### Guruhga:

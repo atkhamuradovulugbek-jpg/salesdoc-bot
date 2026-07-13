@@ -120,10 +120,9 @@ async def morning_job(app: Application):
         photos = []
         if card["debt_total"] > 0:
             photos.append(render_debt_card(card))       # 1-jadval: qarz
-        if card["returns_total"] > 0:
-            photos.append(render_returns_card(card))    # 2-jadval: vazvrat
-        if not photos:
-            continue
+        # Vazvrat kartasi HAR KUNI (foydalanuvchi qarori 2026-07-13): kecha vazvrat
+        # bo'lmasa ham "kunlik yo'q" + oylik jami vazvratni ko'rsatib turadi.
+        photos.append(render_returns_card(card))        # 2-jadval: vazvrat
         await _send_agent(app, ag.sd_id, photos, day, "morning")
 
     # Adminga ertalabki svodka (qarz/vazvrat bo'yicha eng muhimlari)
