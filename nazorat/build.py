@@ -46,6 +46,16 @@ class DayContext:
         st = self.rules.statuses_ok
         with get_conn() as conn:
             for ag in self.agents:
+                # O'rindiqda yangi agent aniqlangan bo'lsa — start_date/kuzatuv/qisqa ismni
+                # qo'llaymiz (faqat o'qiydi; yozish/aniqlash jobs'da bir marta bo'ladi).
+                _term = storage.get_agent_term(conn, ag.sd_id)
+                if _term:
+                    if _term["start_date"]:
+                        ag.start_date = _term["start_date"]
+                    if _term["observe_until"] and self.today.isoformat() <= _term["observe_until"]:
+                        ag.observe_only = True
+                    if _term["is_new"] and _term["short_name"]:
+                        ag.display = _term["short_name"]
                 s = AgentSnapshot(conn, ag, self.rules, self.today)
                 self.snap[ag.sd_id] = s
                 self.by_league[ag.league].append(s)

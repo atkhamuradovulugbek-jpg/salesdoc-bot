@@ -81,6 +81,8 @@ class Agent(BaseModel):
     ball_plan: int = 0
     observe_only: bool = False               # yangi agent: ball bor, plan/sovrin yo'q
     debt_limit: float | None = None          # alohida limit (bo'lmasa liga standarti)
+    start_date: str | None = None            # yangi agent shu sanadan sanaladi (eski agent
+                                             # savdosi aralashmasin). None = to'liq oy (eski agent).
 
     @property
     def short(self) -> str:

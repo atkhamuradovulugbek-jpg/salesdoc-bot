@@ -61,6 +61,17 @@ def init_nz_tables(conn: sqlite3.Connection) -> None:
             saved_at    TEXT NOT NULL,
             PRIMARY KEY (day, method)
         );
+
+        CREATE TABLE IF NOT EXISTS nz_agent_terms (
+            sd_id           TEXT PRIMARY KEY,   -- o'rindiq (agent sd_id)
+            sd_name         TEXT,               -- oxirgi ko'rilgan Sales Doctor ismi
+            short_name      TEXT,               -- avtomatik qisqa ism (o'zgarishda)
+            start_date      TEXT,               -- joriy agent shu sanadan (yangi bo'lsa); NULL = eski/to'liq oy
+            observe_until   TEXT,               -- kuzatuv rejimi shu sanagacha (yangi agentning 1-to'liq oyi)
+            is_new          INTEGER DEFAULT 0,  -- 1 = o'rindiqda agent ALMASHDI (aniqlangan)
+            notified        INTEGER DEFAULT 1,  -- admin xabardor qilindimi (0 = kutmoqda)
+            updated_at      TEXT
+        );
     """)
 
 
@@ -242,3 +253,91 @@ def load_raw(conn: sqlite3.Connection, day: str, method: str):
     if not row:
         return None
     return json.loads(zlib.decompress(row["payload"]).decode())
+
+
+# ------------------------------------------------------------------
+# Agent almashinuvi (o'rindiqda yangi agent) — avtomatik aniqlash
+# ------------------------------------------------------------------
+
+def _short_name(sd_name: str) -> str:
+    """Sales Doctor ismidan qisqa ism (birinchi so'z, hudud qavsi olib tashlanadi)."""
+    if not sd_name:
+        return ""
+    base = sd_name.split("(")[0].strip()   # "Behruz Eshpo'latov (Mirzo...)" -> "Behruz Eshpo'latov"
+    return base.split()[0] if base else sd_name
+
+
+def _observe_until(start_iso: str) -> str:
+    """Kuzatuv rejimi: yangi agentning birinchi TO'LIQ oyi oxirigacha.
+    Masalan 10-iyulda boshlasa → avgust oxirigacha (iyul chala + avgust to'liq)."""
+    d = date.fromisoformat(start_iso)
+    first_next = (d.replace(day=1) + timedelta(days=32)).replace(day=1)      # keyingi oy 1-kuni
+    end_first_full = (first_next + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    return end_first_full.isoformat()
+
+
+def _new_occupant_start(conn: sqlite3.Connection, sd_id: str,
+                        month_first_iso: str, today_iso: str) -> str:
+    """Yangi agentning boshlanish sanasi = joriy oyda oxirgi 3+ kunlik tanaffusdan
+    keyingi birinchi savdo (eski agent ketib, yangi boshlaganini bildiradi).
+    Tanaffus bo'lmasa — oydagi birinchi savdo. Savdo yo'q bo'lsa — bugun."""
+    rows = conn.execute("""
+        SELECT DISTINCT date d FROM orders
+        WHERE agent_sd_id=? AND date>=? AND date<=? AND status IN (1,2,3)
+        ORDER BY date
+    """, (sd_id, month_first_iso, today_iso)).fetchall()
+    dates = [r["d"] for r in rows]
+    if not dates:
+        return today_iso
+    start = dates[0]
+    for prev, cur in zip(dates, dates[1:]):
+        if (date.fromisoformat(cur) - date.fromisoformat(prev)).days >= 3:
+            start = cur
+    return start
+
+
+def sync_agent_terms(conn: sqlite3.Connection, sd_ids: list[str],
+                     today_iso: str, now_iso: str) -> list[dict]:
+    """Har o'rindiq uchun Sales Doctor ismini kuzatadi. Ism o'zgarsa — YANGI AGENT:
+    start_date (birinchi savdodan) + kuzatuv rejimi belgilanadi. Birinchi ko'rishda
+    (baseline) o'zgarish emas — shunchaki eslab qo'yiladi. Qaytadi: o'zgarishlar ro'yxati."""
+    month_first_iso = today_iso[:8] + "01"
+    changes: list[dict] = []
+    for sd_id in sd_ids:
+        row = conn.execute("SELECT name FROM agents WHERE sd_id=?", (sd_id,)).fetchone()
+        cur_name = ((row["name"] if row else "") or "").strip()
+        term = conn.execute("SELECT * FROM nz_agent_terms WHERE sd_id=?", (sd_id,)).fetchone()
+        if term is None:
+            conn.execute("""
+                INSERT INTO nz_agent_terms (sd_id, sd_name, short_name, start_date,
+                                            observe_until, is_new, notified, updated_at)
+                VALUES (?, ?, ?, NULL, NULL, 0, 1, ?)
+            """, (sd_id, cur_name, _short_name(cur_name), now_iso))
+        elif cur_name and (term["sd_name"] or "").strip() != cur_name:
+            start = _new_occupant_start(conn, sd_id, month_first_iso, today_iso)
+            observe_until = _observe_until(start)
+            conn.execute("""
+                UPDATE nz_agent_terms SET sd_name=?, short_name=?, start_date=?,
+                    observe_until=?, is_new=1, notified=0, updated_at=? WHERE sd_id=?
+            """, (cur_name, _short_name(cur_name), start, observe_until, now_iso, sd_id))
+            changes.append({"sd_id": sd_id, "old_name": term["sd_name"] or "—",
+                            "new_name": cur_name, "short_name": _short_name(cur_name),
+                            "start_date": start, "observe_until": observe_until})
+    return changes
+
+
+def get_agent_term(conn: sqlite3.Connection, sd_id: str) -> sqlite3.Row | None:
+    return conn.execute("SELECT * FROM nz_agent_terms WHERE sd_id=?", (sd_id,)).fetchone()
+
+
+def pending_term_changes(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Admin hali xabardor qilinmagan o'zgarishlar (notified=0)."""
+    return conn.execute(
+        "SELECT * FROM nz_agent_terms WHERE is_new=1 AND notified=0"
+    ).fetchall()
+
+
+def mark_terms_notified(conn: sqlite3.Connection, sd_ids: list[str], now_iso: str) -> None:
+    for sd_id in sd_ids:
+        conn.execute("UPDATE nz_agent_terms SET notified=1, updated_at=? WHERE sd_id=?",
+                     (now_iso, sd_id))

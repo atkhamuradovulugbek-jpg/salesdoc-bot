@@ -227,7 +227,11 @@ class AgentSnapshot:
         self.today = today
         self.league = agent.league
         self.month_first = today.replace(day=1)
-        dfrom = self.month_first.isoformat()
+        month_first_iso = self.month_first.isoformat()
+        # Yangi agent (start_date bor) — savdo/ball/vazvrat/toy/vizit shu sanadan sanaladi,
+        # eski agentniki aralashmasin. start_date yo'q bo'lsa (eski agent) — to'liq oy, o'zgarishsiz.
+        _sd = getattr(agent, "start_date", None)
+        dfrom = max(month_first_iso, _sd) if _sd else month_first_iso
         dto = today.isoformat()
         st = rules.statuses_ok
 

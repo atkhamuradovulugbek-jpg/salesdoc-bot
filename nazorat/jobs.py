@@ -107,6 +107,10 @@ async def morning_job(app: Application):
     today = date.today()
     day = today.isoformat()
 
+    # O'rindiqda yangi agent aniqlash (ism o'zgargani) — dc'dan OLDIN, shu kunги
+    # hisobotga tushishi uchun. Adminга bir marta xabar beradi.
+    await _agent_change_alerts(app, day)
+
     # Qarz tarixini saqlaymiz (yosh hisobi uchun) — har kuni bir marta
     with get_conn() as conn:
         n = storage.snapshot_balances(conn, day)
@@ -137,6 +141,27 @@ async def _supervisor_morning(app, dc: DayContext, day: str):
     for league in ("city", "region"):
         photo = render_supervisor_debt(dc.supervisor_debt(league))
         await _send_supervisor(app, league, photo, day, "debt")
+
+
+async def _agent_change_alerts(app, day: str):
+    """O'rindiqda yangi agent (Sales Doctor ismi o'zgargan) — aniqlab, adminга xabar."""
+    from .core.rules import load_agents
+    sd_ids = [a.sd_id for a in load_agents().agents]
+    with get_conn() as conn:
+        changes = storage.sync_agent_terms(conn, sd_ids, day, _now())
+    if not changes:
+        return
+    for ch in changes:
+        text = (f"🆕 Yangi agent aniqlandi (o'rindiq almashdi)!\n"
+                f"Eski: {ch['old_name']}\n"
+                f"Yangi: {ch['new_name']} → hisobda \"{ch['short_name']}\"\n"
+                f"Hisoblanadi: {ch['start_date']} dan\n"
+                f"Kuzatuv rejimi: {ch['observe_until']} gacha (reja/sovrin yo'q)\n"
+                f"Ism yoki sana noto'g'ri bo'lsa — menga ayting, to'g'rilayman.")
+        await _admins(app, text=text)
+    with get_conn() as conn:
+        storage.mark_terms_notified(conn, [c["sd_id"] for c in changes], _now())
+    logger.info("Agent almashinuvi: %d ta yangi agent aniqlandi", len(changes))
 
 
 async def _admin_morning(app, dc: DayContext, day: str):

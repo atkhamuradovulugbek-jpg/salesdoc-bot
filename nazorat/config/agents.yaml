@@ -62,17 +62,18 @@ agents:
     code: TSH-SHT-01
     ball_plan: 50
 
-  # Jumagul ketmoqda — o'rniga yangi agent kelganda shu yozuv yangilanadi
-  # (sd_id o'zgaradi, kod TSH-MUB-01 qoladi). Yangi agent birinchi to'liq oyi
-  # "kuzatuv rejimi"da bo'ladi: ball hisoblanadi, plan/sovrin yo'q.
+  # Mirzo Ulug'bek o'rindig'i: Jumagul ketdi, o'rniga Behruz Eshpo'latov keldi (2026-07-10).
+  # Kuzatuv rejimi: ball hisoblanadi, plan/sovrin yo'q. start_date — eski agent savdosi
+  # aralashmasin uchun. Kelajakda o'rindiq ismi o'zgarsa, bot avtomatik aniqlaydi (nz_agent_terms).
   - sd_id: d0_144
-    name: Ibragimova Jumagul
-    display: Jumagul
+    name: "Behruz Eshpo'latov"
+    display: Behruz
     area: Mirzo Ulugbek
     league: city
     code: TSH-MUB-01
     ball_plan: 0
     observe_only: true
+    start_date: "2026-07-10"
 
   # ---------- VILOYAT ----------
   - sd_id: d0_89
