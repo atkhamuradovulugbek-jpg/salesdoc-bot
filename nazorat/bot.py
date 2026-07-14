@@ -14,7 +14,8 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
+                      ReplyKeyboardMarkup, Update)
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
 from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
@@ -37,6 +38,14 @@ CODE_TO_AGENT = {a.code.upper(): a for a in AGENTS_CFG.agents}
 CODE_TO_SUP = {s.code.upper(): s for s in AGENTS_CFG.supervisors}
 SD_TO_AGENT = {a.sd_id: a for a in AGENTS_CFG.agents}
 
+# Agent uchun doimiy tugmalar (matn buyruq o'rniga — foydalanuvchi qarori 2026-07-14)
+AGENT_KB = ReplyKeyboardMarkup(
+    [["📊 Bugungi natija", "📅 Oylik ball"],
+     ["🎁 Happy Toy", "💳 Qarzlar", "↩️ Vazvratlar"],
+     ["❓ Yordam"]],
+    resize_keyboard=True,
+)
+
 
 def _now() -> str:
     from datetime import datetime
@@ -57,59 +66,75 @@ WELCOME = (
 
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    chat_id = update.effective_chat.id
+    with get_conn() as conn:
+        b = storage.binding_by_chat(conn, chat_id)
+    if b and b["role"] == "agent":
+        await update.message.reply_text(
+            "✅ Siz ulangansiz. Quyidagi tugmalardan foydalaning 👇",
+            reply_markup=AGENT_KB)
+        return
     await update.message.reply_text(WELCOME, parse_mode=ParseMode.HTML)
 
 
 async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Har qanday matn — kod deb qabul qilinadi (agar hali ulanmagan bo'lsa)."""
+    """Ulangan bo'lsa — TUGMA bosilganini tekshiradi. Ulanmagan bo'lsa — matn KOD deb
+    olinadi va ADMIN TASDIG'IGA yuboriladi (eng xavfsiz — foydalanuvchi qarori 2026-07-14)."""
     chat_id = update.effective_chat.id
-    text = (update.message.text or "").strip().upper()
+    raw = (update.message.text or "").strip()
 
     with get_conn() as conn:
         binding = storage.binding_by_chat(conn, chat_id)
 
-    # Allaqachon ulangan — buyruqlarni eslатamiz
+    # Allaqachon ulangan — tugmalar bilan ishlaydi
     if binding:
-        await _send_self_report(ctx.application, chat_id, binding)
+        handler = BUTTON_HANDLERS.get(raw)
+        if handler:
+            return await handler(update, ctx)
+        await update.message.reply_text(
+            "Quyidagi tugmalardan foydalaning 👇", reply_markup=AGENT_KB)
         return
 
-    # Kod tekshirish
-    agent = CODE_TO_AGENT.get(text)
-    sup = CODE_TO_SUP.get(text)
+    # Ulanmagan — matn kod deb olinadi
+    code = raw.upper()
+    agent = CODE_TO_AGENT.get(code)
+    sup = CODE_TO_SUP.get(code)
     is_admin = chat_id in ADMIN_IDS
 
+    # Admin o'zi — tasdiq shart emas
+    if is_admin and code in ("ADMIN", "/ADMIN"):
+        with get_conn() as conn:
+            storage.bind_code(conn, code, chat_id, "admin", None, _now())
+        return await update.message.reply_text("✅ Admin ulandingiz.")
+
     if agent:
-        role, sd_id, name = "agent", agent.sd_id, agent.name
+        name = agent.name
     elif sup:
-        role, sd_id, name = "supervisor", None, sup.name
-    elif is_admin and text in ("ADMIN", "/ADMIN"):
-        role, sd_id, name = "admin", None, "Administrator"
+        name = sup.name
     else:
-        await update.message.reply_text(
-            "❌ Kod noto'g'ri. Iltimos, kodingizni tekshirib qayta yuboring."
-        )
-        return
+        return await update.message.reply_text(
+            "❌ Kod noto'g'ri. Iltimos, kodingizni tekshirib qayta yuboring.")
 
-    with get_conn() as conn:
-        old_chat = storage.bind_code(conn, text, chat_id, role, sd_id, _now())
-
+    # Admin tasdig'i uchun so'rov
+    user = update.effective_user
+    who = f"@{user.username}" if (user and user.username) else (
+        (user.full_name if user else None) or str(chat_id))
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Ha", callback_data=f"nzbind:ok:{chat_id}:{code}"),
+        InlineKeyboardButton("❌ Yo'q", callback_data=f"nzbind:no:{chat_id}:{code}"),
+    ]])
     await update.message.reply_text(
-        f"✅ Ulandingiz!\n\n👤 <b>{name}</b>\n"
-        f"Endi har kuni soat 20:00 da natijangiz, 10:00 da qarz/vazvrat "
-        f"ma'lumotingiz keladi.\n\nBuyruqlar: /bugun /oy /toy /qarz /yordam",
-        parse_mode=ParseMode.HTML,
-    )
-
-    # Kod boshqa chatдan ko'chirilgan bo'lsa — eski chatni ogohlantirib, adminga signal
-    if old_chat:
+        "⏳ So'rovingiz administratorga yuborildi. Tasdiqlangach xabar beramiz.")
+    for aid in ADMIN_IDS:
         try:
             await ctx.application.bot.send_message(
-                old_chat, "⚠️ Sizning kodingiz boshqa qurilmada ishlatildi. "
-                          "Agar bu siz bo'lmasangiz, administratorga xabar bering.")
+                aid, f"🔐 Ulanish so'rovi:\n"
+                     f"Kim: {who} (chat {chat_id})\n"
+                     f"Kod: {code} → {name}\n"
+                     f"Tasdiqlaysizmi?",
+                reply_markup=kb)
         except TelegramError:
             pass
-        await _notify_admins(ctx.application,
-                             f"⚠️ Kod qayta ulandi: {name} ({text}) — eski chat {old_chat} → yangi {chat_id}")
 
 
 # ==================================================================
@@ -181,8 +206,9 @@ async def cmd_yordam(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         "🧸 <b>Toy:</b> 105 blok=600k, 135=900k, 150=1.2mln (qaytmagan mahsulotga).\n"
         "💵 <b>KPI:</b> oylik plan bajarilishiga qarab komissiya + bonus.\n"
         "💳 <b>Qarz:</b> limitdan oshmasin.\n\n"
-        "Buyruqlar: /bugun /oy /toy /qarz",
+        "Pastdagi tugmalardan foydalaning 👇",
         parse_mode=ParseMode.HTML,
+        reply_markup=AGENT_KB,
     )
 
 
@@ -194,7 +220,7 @@ async def _send_self_report(app, chat_id: int, binding):
         await app.bot.send_photo(chat_id, render_plan_card(cards[1]))
         await app.bot.send_photo(chat_id, render_toy_card(cards[2]))
     else:
-        await app.bot.send_message(chat_id, "✅ Ulangansiz. Buyruqlar: /bugun /oy /toy /qarz /vazvrat")
+        await app.bot.send_message(chat_id, "✅ Ulangansiz.")
 
 
 # ==================================================================
@@ -209,6 +235,56 @@ async def _notify_admins(app, text: str):
             pass
 
 
+async def on_bind_decision(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Admin 'Ha/Yo'q' bosdi — ulanish so'rovini tasdiqlaydi yoki rad etadi."""
+    q = update.callback_query
+    await q.answer()
+    if q.message.chat.id not in ADMIN_IDS:
+        return
+    parts = q.data.split(":")
+    if len(parts) < 4:
+        return
+    decision, target, code = parts[1], int(parts[2]), parts[3]
+    agent = CODE_TO_AGENT.get(code)
+    sup = CODE_TO_SUP.get(code)
+    if agent:
+        role, sd_id, name = "agent", agent.sd_id, agent.name
+    elif sup:
+        role, sd_id, name = "supervisor", None, sup.name
+    else:
+        return await q.edit_message_text("❌ Kod topilmadi.")
+
+    if decision == "no":
+        await q.edit_message_text(f"❌ Rad etildi: {name} ({code})")
+        try:
+            await ctx.application.bot.send_message(
+                target, "❌ Ulanish so'rovingiz rad etildi. Administrator bilan bog'laning.")
+        except TelegramError:
+            pass
+        return
+
+    # Tasdiqlandi — ulaymiz
+    with get_conn() as conn:
+        old_chat = storage.bind_code(conn, code, target, role, sd_id, _now())
+    await q.edit_message_text(f"✅ Tasdiqlandi: {name} ({code}) → chat {target}")
+    try:
+        if role == "agent":
+            await ctx.application.bot.send_message(
+                target, f"✅ Ulandingiz!\n👤 {name}\n"
+                        f"Har kuni 10:00 (qarz/vazvrat) va 20:00 (natija) da hisobot keladi.\n"
+                        f"Quyidagi tugmalardan foydalaning 👇", reply_markup=AGENT_KB)
+        else:
+            await ctx.application.bot.send_message(target, f"✅ Ulandingiz!\n👤 {name}")
+    except TelegramError:
+        pass
+    if old_chat and old_chat != target:
+        try:
+            await ctx.application.bot.send_message(
+                old_chat, "⚠️ Kodingiz boshqa qurilmaga ulandi (admin tasdig'i bilan).")
+        except TelegramError:
+            pass
+
+
 async def cmd_tasdiqla(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     """Oy yakuni g'oliblarini tasdiqlab, agentlarga/guruhga e'lon qiladi."""
     if update.effective_chat.id not in ADMIN_IDS:
@@ -216,3 +292,14 @@ async def cmd_tasdiqla(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     from .month_end import confirm_and_announce
     msg = await confirm_and_announce(ctx.application)
     await update.message.reply_text(msg)
+
+
+# Tugma matni → buyruq funksiyasi (on_text shu orqali yo'naltiradi)
+BUTTON_HANDLERS = {
+    "📊 Bugungi natija": cmd_bugun,
+    "📅 Oylik ball": cmd_oy,
+    "🎁 Happy Toy": cmd_toy,
+    "💳 Qarzlar": cmd_qarz,
+    "↩️ Vazvratlar": cmd_vazvrat,
+    "❓ Yordam": cmd_yordam,
+}

@@ -16,8 +16,8 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from telegram.ext import (Application, CommandHandler, MessageHandler,
-                          ContextTypes, filters)
+from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
+                          MessageHandler, ContextTypes, filters)
 
 from db import get_conn, init_db
 
@@ -89,6 +89,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("vazvrat", nzbot.cmd_vazvrat))
     app.add_handler(CommandHandler("yordam", nzbot.cmd_yordam))
     app.add_handler(CommandHandler("tasdiqla", nzbot.cmd_tasdiqla))
+    app.add_handler(CallbackQueryHandler(nzbot.on_bind_decision, pattern=r"^nzbind:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, nzbot.on_text))
     return app
 
