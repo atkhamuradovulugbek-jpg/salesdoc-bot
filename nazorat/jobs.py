@@ -129,8 +129,9 @@ async def morning_job(app: Application):
         photos.append(render_returns_card(card))        # 2-jadval: vazvrat
         await _send_agent(app, ag.sd_id, photos, day, "morning")
 
-    # Adminga ertalabki svodka (qarz/vazvrat bo'yicha eng muhimlari)
-    await _admin_morning(app, dc, day)
+    # Admin svodkasi ERTALAB YUBORILMAYDI (foydalanuvchi qarori 2026-07-14):
+    # savdo/ball/reja jadvali faqat KECHKI 20:00 svodkada — ertalab savdo hali 0
+    # bo'lib chalkash chiqardi. Ertalab faqat qarz/vazvrat materiallari.
 
     # Supervayzerga: qarz-vazvrat jadvali (liga bo'yicha)
     await _supervisor_morning(app, dc, day)
@@ -162,18 +163,6 @@ async def _agent_change_alerts(app, day: str):
     with get_conn() as conn:
         storage.mark_terms_notified(conn, [c["sd_id"] for c in changes], _now())
     logger.info("Agent almashinuvi: %d ta yangi agent aniqlandi", len(changes))
-
-
-async def _admin_morning(app, dc: DayContext, day: str):
-    with get_conn() as conn:
-        if storage.already_sent(conn, day, "admin_morning", "admin"):
-            return
-    for league in ("city", "region"):
-        summ = dc.admin_evening(league)   # jadval bir xil, ertalab qarz muhim
-        summ["title"] = f"ertalabki svodka · {'shahar' if league=='city' else 'viloyat'}"
-        await _admins(app, photo=render_admin_summary(summ))
-    with get_conn() as conn:
-        storage.mark_sent(conn, day, "admin_morning", "admin", _now())
 
 
 # ==================================================================
