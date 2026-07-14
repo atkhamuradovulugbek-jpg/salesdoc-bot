@@ -90,6 +90,7 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("yordam", nzbot.cmd_yordam))
     app.add_handler(CommandHandler("tasdiqla", nzbot.cmd_tasdiqla))
     app.add_handler(CallbackQueryHandler(nzbot.on_bind_decision, pattern=r"^nzbind:"))
+    app.add_handler(CallbackQueryHandler(nzbot.on_unbind, pattern=r"^nzunbind:"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, nzbot.on_text))
     return app
 

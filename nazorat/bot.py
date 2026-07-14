@@ -46,6 +46,19 @@ AGENT_KB = ReplyKeyboardMarkup(
     resize_keyboard=True,
 )
 
+# Admin uchun tugmalar (ulanganlarni ko'rish/uzish)
+ADMIN_KB = ReplyKeyboardMarkup(
+    [["👥 Ulanganlar"]],
+    resize_keyboard=True,
+)
+
+
+def _period(dc) -> str:
+    """Karta tagidagi izoh uchun davr: '1–14 iyul'."""
+    from .data import MONTHS_UZ
+    t = dc.today
+    return f"1–{t.day} {MONTHS_UZ[t.month].lower()}"
+
 
 def _now() -> str:
     from datetime import datetime
@@ -67,6 +80,11 @@ WELCOME = (
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
+    if chat_id in ADMIN_IDS:
+        await update.message.reply_text(
+            "👋 Admin panel. Ulangan agentlarni ko'rish/uzish uchun tugmani bosing 👇",
+            reply_markup=ADMIN_KB)
+        return
     with get_conn() as conn:
         b = storage.binding_by_chat(conn, chat_id)
     if b and b["role"] == "agent":
@@ -83,16 +101,20 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     raw = (update.message.text or "").strip()
 
+    # Admin tugmasi (ulanganlarni ko'rish/uzish)
+    if chat_id in ADMIN_IDS and raw == "👥 Ulanganlar":
+        return await cmd_admin_connected(update, ctx)
+
     with get_conn() as conn:
         binding = storage.binding_by_chat(conn, chat_id)
 
-    # Allaqachon ulangan — tugmalar bilan ishlaydi
+    # Allaqachon ulangan — FAQAT tugmalar ishlaydi (matn yozsa — tugmalarni eslatadi)
     if binding:
         handler = BUTTON_HANDLERS.get(raw)
         if handler:
             return await handler(update, ctx)
         await update.message.reply_text(
-            "Quyidagi tugmalardan foydalaning 👇", reply_markup=AGENT_KB)
+            "⌨️ Iltimos, pastdagi tugmalardan foydalaning 👇", reply_markup=AGENT_KB)
         return
 
     # Ulanmagan — matn kod deb olinadi
@@ -151,10 +173,14 @@ async def cmd_bugun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not b or b["role"] != "agent":
         return await update.message.reply_text("Avval kodingizni yuboring: /start")
     dc = DayContext()
+    p = _period(dc)
     cards = dc.evening_cards(b["sd_id"])
-    await update.message.reply_photo(render_ball_card(cards[0]))
-    await update.message.reply_photo(render_plan_card(cards[1]))
-    await update.message.reply_photo(render_toy_card(cards[2]))
+    await update.message.reply_photo(render_ball_card(cards[0]),
+                                     caption=f"📊 Bugungi natija + oylik ball · {p}")
+    await update.message.reply_photo(render_plan_card(cards[1]),
+                                     caption=f"📅 Oylik savdo reja · {p}")
+    await update.message.reply_photo(render_toy_card(cards[2]),
+                                     caption=f"🎁 Happy Toy · {p}")
 
 
 async def cmd_toy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -162,7 +188,8 @@ async def cmd_toy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not b or b["role"] != "agent":
         return await update.message.reply_text("Avval kodingizni yuboring: /start")
     dc = DayContext()
-    await update.message.reply_photo(render_toy_card(dc.evening_cards(b["sd_id"])[2]))
+    await update.message.reply_photo(render_toy_card(dc.evening_cards(b["sd_id"])[2]),
+                                     caption=f"🎁 Happy Toy · {_period(dc)}")
 
 
 async def cmd_qarz(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -170,7 +197,8 @@ async def cmd_qarz(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not b or b["role"] != "agent":
         return await update.message.reply_text("Avval kodingizni yuboring: /start")
     dc = DayContext()
-    await update.message.reply_photo(render_debt_card(dc.morning_card(b["sd_id"])))
+    await update.message.reply_photo(render_debt_card(dc.morning_card(b["sd_id"])),
+                                     caption="💳 Qarzdorliklar · bugungi holat (50 ming so'mdan yuqori do'konlar)")
 
 
 async def cmd_vazvrat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -178,7 +206,8 @@ async def cmd_vazvrat(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if not b or b["role"] != "agent":
         return await update.message.reply_text("Avval kodingizni yuboring: /start")
     dc = DayContext()
-    await update.message.reply_photo(render_returns_card(dc.morning_card(b["sd_id"])))
+    await update.message.reply_photo(render_returns_card(dc.morning_card(b["sd_id"])),
+                                     caption=f"↩️ Vazvratlar · kunlik (kecha) + oylik jami ({_period(dc)})")
 
 
 async def cmd_oy(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -281,6 +310,44 @@ async def on_bind_decision(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         try:
             await ctx.application.bot.send_message(
                 old_chat, "⚠️ Kodingiz boshqa qurilmaga ulandi (admin tasdig'i bilan).")
+        except TelegramError:
+            pass
+
+
+async def cmd_admin_connected(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Admin: ulangan agentlar ro'yxati, har biriga 'Uzish' tugmasi."""
+    if update.effective_chat.id not in ADMIN_IDS:
+        return
+    with get_conn() as conn:
+        rows = storage.list_bindings(conn)
+    agents = [r for r in rows if r["role"] == "agent"]
+    if not agents:
+        return await update.message.reply_text("Hozircha ulangan agent yo'q.", reply_markup=ADMIN_KB)
+    await update.message.reply_text(f"👥 Ulangan agentlar: {len(agents)} ta")
+    for r in agents:
+        ag = SD_TO_AGENT.get(r["sd_id"])
+        name = ag.short if ag else r["code"]
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton(f"❌ {name}ni uzish", callback_data=f"nzunbind:{r['code']}")]])
+        await update.message.reply_text(f"👤 {name} — {r['code']}", reply_markup=kb)
+
+
+async def on_unbind(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Admin 'Uzish' bosdi — agent ulanishini o'chiradi."""
+    q = update.callback_query
+    await q.answer()
+    if q.message.chat.id not in ADMIN_IDS:
+        return
+    code = q.data.split(":", 1)[1]
+    with get_conn() as conn:
+        old_chat = storage.unbind(conn, code)
+    agent = CODE_TO_AGENT.get(code)
+    name = agent.short if agent else code
+    await q.edit_message_text(f"🔌 Uzildi: {name} ({code})")
+    if old_chat:
+        try:
+            await ctx.application.bot.send_message(
+                old_chat, "🔌 Siz botdan uzildingiz. Qayta ulanish uchun kodingizni yuboring.")
         except TelegramError:
             pass
 

@@ -110,6 +110,20 @@ def chat_for_sd_id(conn: sqlite3.Connection, sd_id: str) -> int | None:
     return row["chat_id"] if row else None
 
 
+def list_bindings(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """Barcha ulanishlar (admin ko'rish/uzish uchun)."""
+    return conn.execute(
+        "SELECT code, chat_id, role, sd_id, bound_at FROM nz_bindings ORDER BY role, code"
+    ).fetchall()
+
+
+def unbind(conn: sqlite3.Connection, code: str) -> int | None:
+    """Kodni uzadi (o'chiradi). Qaytadi: uzilgan chat_id (agentni ogohlantirish uchun)."""
+    row = conn.execute("SELECT chat_id FROM nz_bindings WHERE code=?", (code,)).fetchone()
+    conn.execute("DELETE FROM nz_bindings WHERE code=?", (code,))
+    return row["chat_id"] if row else None
+
+
 def chat_for_supervisor(conn: sqlite3.Connection, code: str) -> int | None:
     """Supervayzer kodiga bog'langan chat (v2'da ulanadi; ulanmagan bo'lsa None)."""
     if not code:
