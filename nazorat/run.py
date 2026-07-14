@@ -83,6 +83,7 @@ def build_app() -> Application:
     app = Application.builder().token(NAZORAT_BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", nzbot.cmd_start))
     app.add_handler(CommandHandler("bugun", nzbot.cmd_bugun))
+    app.add_handler(CommandHandler("kecha", nzbot.cmd_kecha))
     app.add_handler(CommandHandler("oy", nzbot.cmd_oy))
     app.add_handler(CommandHandler("toy", nzbot.cmd_toy))
     app.add_handler(CommandHandler("qarz", nzbot.cmd_qarz))

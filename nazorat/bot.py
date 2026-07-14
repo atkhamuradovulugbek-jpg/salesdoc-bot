@@ -12,7 +12,7 @@ DRY_RUN=true bo'lsa — hammasi FAQAT adminga (sinov davri).
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 
 from telegram import (InlineKeyboardButton, InlineKeyboardMarkup,
                       ReplyKeyboardMarkup, Update)
@@ -40,8 +40,9 @@ SD_TO_AGENT = {a.sd_id: a for a in AGENTS_CFG.agents}
 
 # Agent uchun doimiy tugmalar (matn buyruq o'rniga — foydalanuvchi qarori 2026-07-14)
 AGENT_KB = ReplyKeyboardMarkup(
-    [["📊 Bugungi natija", "📅 Oylik ball"],
-     ["🎁 Happy Toy", "💳 Qarzlar", "↩️ Vazvratlar"],
+    [["📊 Bugungi natija", "🕐 Kechagi natija"],
+     ["📅 Oylik ball", "🎁 Happy Toy"],
+     ["💳 Qarzlar", "↩️ Vazvratlar"],
      ["❓ Yordam"]],
     resize_keyboard=True,
 )
@@ -179,6 +180,23 @@ async def cmd_bugun(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                                      caption=f"📊 Bugungi natija + oylik ball · {p}")
     await update.message.reply_photo(render_plan_card(cards[1]),
                                      caption=f"📅 Oylik savdo reja · {p}")
+    await update.message.reply_photo(render_toy_card(cards[2]),
+                                     caption=f"🎁 Happy Toy · {p}")
+
+
+async def cmd_kecha(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Kechagi natija — ball/reja/toy kartalari (kecha holatiga)."""
+    b = await _get_binding(update.effective_chat.id)
+    if not b or b["role"] != "agent":
+        return await update.message.reply_text("Avval kodingizni yuboring: /start")
+    y = date.today() - timedelta(days=1)
+    dc = DayContext(today=y)
+    p = _period(dc)   # kecha holatiga: masalan "1–13 iyul"
+    cards = dc.evening_cards(b["sd_id"])
+    await update.message.reply_photo(render_ball_card(cards[0]),
+                                     caption=f"🕐 Kechagi natija + oylik ball · {p}")
+    await update.message.reply_photo(render_plan_card(cards[1]),
+                                     caption=f"📅 Oylik savdo reja (kecha holatiga) · {p}")
     await update.message.reply_photo(render_toy_card(cards[2]),
                                      caption=f"🎁 Happy Toy · {p}")
 
@@ -364,6 +382,7 @@ async def cmd_tasdiqla(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 # Tugma matni → buyruq funksiyasi (on_text shu orqali yo'naltiradi)
 BUTTON_HANDLERS = {
     "📊 Bugungi natija": cmd_bugun,
+    "🕐 Kechagi natija": cmd_kecha,
     "📅 Oylik ball": cmd_oy,
     "🎁 Happy Toy": cmd_toy,
     "💳 Qarzlar": cmd_qarz,
