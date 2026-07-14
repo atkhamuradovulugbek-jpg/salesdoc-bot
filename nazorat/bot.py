@@ -346,8 +346,49 @@ async def cmd_admin_connected(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         ag = SD_TO_AGENT.get(r["sd_id"])
         name = ag.short if ag else r["code"]
         kb = InlineKeyboardMarkup([[
-            InlineKeyboardButton(f"❌ {name}ni uzish", callback_data=f"nzunbind:{r['code']}")]])
+            InlineKeyboardButton("📤 Namuna yuborish", callback_data=f"nzsample:{r['code']}"),
+            InlineKeyboardButton("❌ Uzish", callback_data=f"nzunbind:{r['code']}")]])
         await update.message.reply_text(f"👤 {name} — {r['code']}", reply_markup=kb)
+
+
+async def on_send_sample(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Admin 'Namuna' bosdi — agentning O'Z akkauntiga kechagi to'liq to'plam yuboradi."""
+    q = update.callback_query
+    if q.message.chat.id not in ADMIN_IDS:
+        return await q.answer()
+    await q.answer("📤 Yuborilyapti...")
+    code = q.data.split(":", 1)[1]
+    with get_conn() as conn:
+        row = conn.execute(
+            "SELECT chat_id, sd_id FROM nz_bindings WHERE code=? AND role='agent'", (code,)
+        ).fetchone()
+    if not row:
+        return await ctx.application.bot.send_message(
+            q.message.chat.id, "❌ Bu agent hali ulanmagan (namuna yuborib bo'lmaydi).")
+    chat, sd_id = row["chat_id"], row["sd_id"]
+    y = date.today() - timedelta(days=1)
+    dc = DayContext(today=y)
+    p = _period(dc)
+    mc = dc.morning_card(sd_id)
+    ev = dc.evening_cards(sd_id)
+    app = ctx.application
+    try:
+        await app.bot.send_message(chat, f"🧪 Namuna — kechagi to'liq to'plam ({p})")
+        await app.bot.send_photo(chat, render_debt_card(mc),
+                                 caption="💳 Qarzdorliklar · bugungi holat")
+        await app.bot.send_photo(chat, render_returns_card(mc),
+                                 caption=f"↩️ Vazvratlar · kunlik + oylik ({p})")
+        await app.bot.send_photo(chat, render_ball_card(ev[0]),
+                                 caption=f"📊 Kechagi natija + oylik ball · {p}")
+        await app.bot.send_photo(chat, render_plan_card(ev[1]),
+                                 caption=f"📅 Oylik savdo reja · {p}")
+        await app.bot.send_photo(chat, render_toy_card(ev[2]),
+                                 caption=f"🎁 Happy Toy · {p}")
+        ag = SD_TO_AGENT.get(sd_id)
+        await app.bot.send_message(q.message.chat.id,
+                                   f"✅ Namuna yuborildi: {ag.short if ag else code}")
+    except TelegramError as e:
+        await app.bot.send_message(q.message.chat.id, f"❌ Yuborilmadi: {e}")
 
 
 async def on_unbind(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
