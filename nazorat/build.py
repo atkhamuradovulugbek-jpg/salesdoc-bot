@@ -218,14 +218,14 @@ class DayContext:
         league_sales = league_prognoz = 0.0
         with get_conn() as conn:
             for s in self.by_league[league]:
-                if s.agent.observe_only:
-                    continue
+                # Yangi (kuzatuv) agent ham KO'RINADI — supervayzer nazorat qiladi, "(yangi)" belgisi bilan.
+                nm = s.agent.short + (" (yangi)" if s.agent.observe_only else "")
                 kirdi, sotdi, strike = agent_strike(conn, s.agent.sd_id, dfrom, dto)
                 prognoz = (s.month_sales / wd_p * wd_t) if wd_p else 0
                 league_sales += s.month_sales
                 league_prognoz += prognoz
                 rows.append({
-                    "name": s.agent.short, "strike": strike,
+                    "name": nm, "strike": strike,
                     "month_sales": s.month_sales, "prognoz": prognoz,
                     "ball": s.month_ball, "ball_plan": s.agent.ball_plan,
                     "toy": s.toy_blocks,
@@ -250,8 +250,7 @@ class DayContext:
         signals = []
         with get_conn() as conn:
             for s in self.by_league[league]:
-                if s.agent.observe_only:
-                    continue
+                nm = s.agent.short + (" (yangi)" if s.agent.observe_only else "")
                 m_partial, m_full = agent_returns_month(conn, s.agent.sd_id, dfrom, dto, st, fs)
                 ret = m_partial + m_full
                 debt = s.debt_total
@@ -260,7 +259,7 @@ class DayContext:
                 league_debt += debt
                 league_ret += ret
                 rows.append({
-                    "name": s.agent.short, "debt": debt, "limit": limit,
+                    "name": nm, "debt": debt, "limit": limit,
                     "ret": ret, "ret_pct": ret_pct,
                 })
                 if debt > limit:
@@ -286,13 +285,12 @@ class DayContext:
         league_today = 0.0
         with get_conn() as conn:
             for s in self.by_league[league]:
-                if s.agent.observe_only:
-                    continue
+                nm = s.agent.short + (" (yangi)" if s.agent.observe_only else "")
                 kirdi, sotdi, _ = agent_strike(conn, s.agent.sd_id, day, day)
                 toy_day = agent_toy_day(conn, s.agent.sd_id, day, sku, st)
                 league_today += s.today_sales
                 rows.append({
-                    "name": s.agent.short, "sales": s.today_sales, "ball": s.today_ball,
+                    "name": nm, "sales": s.today_sales, "ball": s.today_ball,
                     "toy": toy_day, "kirdi": kirdi, "sotdi": sotdi,
                 })
         rows.sort(key=lambda r: -r["sales"])   # bugun eng ko'p sotgan yuqorida
