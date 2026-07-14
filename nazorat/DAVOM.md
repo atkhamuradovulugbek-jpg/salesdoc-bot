@@ -2,7 +2,7 @@
 
 > Bu fayl loyihaning to'liq holatini saqlaydi. Chat tozalangach, Claude shu faylni
 > o'qib, nima qilinganini tushunib, foydalanuvchidan ruxsat so'rab davom etadi.
-> Oxirgi yangilanish: 2026-07-10.
+> Oxirgi yangilanish: 2026-07-14.
 
 ---
 
@@ -246,33 +246,64 @@ Railway: `railway status`, `railway logs`, `railway variables`, `railway up`.
 
 ---
 
-**OXIRGI HOLAT (2026-07-10):** ✅ **DEPLOY QILINDI — JONLI, DRY_RUN SINOV BOSHLANDI.**
-`railway up` bilan deploy (deployment 4cda769b, ● Online). Launcher ikkala botni ham
-xatosiz ishga tushirdi: asosiy bot (scheduler 03/12/15/20:00, agent nazorati) BUZILMADI,
-nazorat bot "✅ ishga tushdi DRY_RUN=True" (morning 10:00 / evening 20:00 / month_final joblar).
-Ikkalasi startup xabarini adminga yubordi. Xato/conflict yo'q. 31 test o'tadi.
-Kod: supervayzer joblarga ulangan (90db828), month_end etaloniga mos.
+## OXIRGI HOLAT (2026-07-14) — JONLI, DRY_RUN, LAUNCH'GA TAYYOR
 
-**TROUBLESHOOTING — "hisobot bo'sh, faqat nomlar, summa yo'q" (2026-07-13 aniqlandi):**
-Sabab: DEPLOY KUNI birinchi hisobot serverdagi baza joriy oy savdosini sync qilishdan OLDIN
-chiqadi → summalar 0. Kod/ko'prik TO'G'RI (data.py oylik savdoni orders.total_after_discount
-dan sana+status bo'yicha oladi). Yechim shart emas: server har kuni 4× sync qiladi
-(03/12/15/20:00) → keyingi kunlar avtomatik to'la. Tekshiruv: `railway logs | grep TO'LIQ`
-(sync "executed successfully" ko'rinishi kerak). Lokalda takrorlash: `run_sync('m','fast')`
-→ `DayContext(today)` → summalar to'la chiqadi. 10-sana bo'sh, 11-12 (dam olish) ko'rilmadi,
-13-sanadan to'la.
+Bot Railway'da ishlayapti (Hobby plan, uzluksiz). **DRY_RUN=true** — barcha AVTOMATIK hisobot
+FAQAT adminga (700216613). 31 test o'tadi. Deploy usuli: **`railway up --ci`** (git push emas;
+commitlar lokal, branch `nazorat-bot`). Ikkala bot start_all.py orqali sog' ishlaydi.
+Foydalanuvchi BUGUN majlisda agentlarga kodlarni tarqatmoqchi.
 
-**HOZIR — DRY_RUN SINOV (1-kun = 2026-07-10):**
-- Nazorat bot har kuni 10:00 (qarz/vazvrat) va 20:00 (ball/reja/toy + supervayzer + admin svodka)
-  hisobotlarni FAQAT adminga (700216613) yuboradi. Birinchi avtomatik kechki hisobot: bugun 20:00.
-- Foydalanuvchi raqamlarni SalesDoctor bilan solishtiradi. Xato bo'lsa → tuzatib qayta deploy.
+### 2026-07-14 QO'SHILGAN IMKONIYATLAR (hammasi jonli, 31 test o'tadi)
+1. **Sync guard (sync.py):** `get_orders` BO'SH qaytsa (API timeout) eski buyurtmalar
+   O'CHIRILMAYDI. Avval DELETE→INSERT bo'sh fetch'da savdoni 0 ga tushirardi ("hisobot bo'sh,
+   summa yo'q" muammosi). `if order_rows:` guard bilan tuzatildi.
+2. **Yangi agent AVTOMATIK (storage.nz_agent_terms):** o'rindiq Sales Doctor ismi o'zgarsa
+   aniqlaydi → start_date (oxirgi 3+ kunlik tanaffusdan keyingi 1-savdo) + kuzatuv (1-to'liq oy
+   oxirigacha) + adminга xabar (jobs.py `_agent_change_alerts`, ertalabki jobda). `Agent.start_date`
+   (data.py: AgentSnapshot dfrom shu sanadan; start_date yo'q agentlar O'ZGARISHSIZ). Behruz
+   Eshpo'latov (d0_144, Mirzo Ulug'bek, Jumagul o'rniga) agents.yaml'da: display Behruz,
+   observe_only, start_date 2026-07-10. Auto sana noto'g'ri → admin aytadi → yaml'da tuzatiladi.
+3. **Ertalabki ADMIN SVODKA olib tashlandi** — admin svodka (savdo jadvali) faqat 20:00.
+   Ertalab 10:00: agent qarz/vazvrat + supervayzer qarz-vazvrat jadval.
+4. **Ulanish = ADMIN TASDIG'I bilan** (bot.py `on_bind_decision`, `nzbind:`): agent kod yozadi →
+   adminга "Ha/Yo'q" tugmasi keladi → tasdiqlasa ulanadi. Taxmin qilingan kod tasdiqsiz o'tmaydi.
+   Admin `ADMIN` kodi bilan tasdiqsiz kiradi.
+5. **TUGMALAR (matn buyruq o'rniga):** AGENT_KB (📊 Bugungi natija · 🕐 Kechagi natija · 📅 Oylik
+   ball · 🎁 Happy Toy · 💳 Qarzlar · ↩️ Vazvratlar · ❓ Yordam). SUPERVISOR_KB (📊 Oylik jadval ·
+   📋 Kunlik jadval · 💳 Qarz-vazvrat). `on_text` tugmani funksiyaga yo'naltiradi (BUTTON_HANDLERS,
+   SUP_BUTTON_HANDLERS). Agent matn yozsa — "tugmalardan foydalaning". / buyruqlar zapas ishlaydi.
+6. **Admin paneli:** `/start` → "👥 Ulanganlar" → har agentga **📤 Namuna yuborish** (agentning
+   BOG'LANGAN chatiga kechagi to'liq to'plam; `nzsample:`) + **❌ Uzish** (`nzunbind:`).
+   storage.list_bindings/unbind.
+7. **Kartalarga izoh** (caption): nima + davr ("📊 Bugungi natija · 1–14 iyul"; "↩️ Vazvratlar ·
+   kunlik + oylik"; "💳 Qarzdorliklar · bugungi holat").
+8. **Supervayzer to'liq ishlaydi:** SPV-TSH-01/SPV-TVL-01 kod → admin tasdiqlaydi → liga jadvallari
+   tugma bilan (cmd_sup_oylik/kunlik/qarz). Yangi (observe) agent supervayzer jadvalida "(yangi)"
+   belgisi bilan KO'RINADI (supervisor_monthly/daily/debt endi observe_only'ni chiqarmaydi).
+9. **Prezentatsiyalar (2 ta artifact, SOXTA namuna raqamlar — real maxfiy ma'lumot YO'Q):**
+   - Agent: https://claude.ai/code/artifact/67cfeafd-1140-4220-892d-47ce5362f6fd
+   - Supervayzer: https://claude.ai/code/artifact/5eecee16-a135-4c61-917f-1cddf91d8796
+   - Generator skriptlar: scratchpad `gen_agent.py`, `gen_supervisor.py`, `gen_fake_cards.py`
+     (soxta "Alisher" agent, qarz <2M, soxta do'kon/ism; haqiqiy logo base64; kodlar xiralashgan).
 
-**KEYINGI QADAMLAR:**
-1. ✅ **Railway plan TASDIQLANDI (2026-07-10)** — HOBBY plan ("You're on the Hobby Plan",
-   $5/oy kredit, 99.9% availability). Bot uzluksiz ishlaydi, trial xavfi yo'q.
-2. 2-3 kun DRY_RUN kuzatuv; hisob to'g'riligini SalesDoctor bilan solishtirish.
-3. To'g'ri bo'lsa DRY_RUN=false (Railway var) → qayta deploy → agentlarga kodlar (TSH-/TVL-)
-   tarqatiladi → agent /start → shaxsiy hisobot. Guruh chat ID'lari (GROUP_CITY/REGION) kerak.
+### KEYINGI QADAM (LAUNCH — majlisdan keyin)
+1. ✅ **Raqam tekshirildi** — Husniobod aniq mos; farq faqat jonli savdo o'sishi (20:00 hisobot to'g'ri).
+2. ⏸️ **Guruh reytingi HOZIRCHA to'xtatilgan** (guruh ulanmagani uchun reyting adminga keladi).
+   Keyin GROUP_CITY_CHAT_ID/GROUP_REGION_CHAT_ID Railway var qo'yiladi.
+3. **Kodlar tarqatiladi** — agent code_1C (agents.yaml: TSH-.../TVL-...), supervayzer SPV-TSH-01/SPV-TVL-01.
+4. **Agent ulanadi:** @siribom_nazorat_bot → /start → kod → **ADMIN TASDIQLAYDI (Ha)** → tugmalar,
+   /bugun bilan sinaydi (DRY_RUN'da ham on-demand ishlaydi).
+5. **Hamma ulanib, joyida bo'lsa → OCHISH:** Railway'da **DRY_RUN=false** qilib **`railway up`** →
+   agentlar har kuni 10:00/20:00 avtomatik hisobot oladi. (DRY_RUN: nz_config.py'dan o'qiladi,
+   Railway variables'da DRY_RUN=true; uni false qilib qayta deploy.)
 
-Foydalanuvchi keyingi chatda "DAVOM.md o'qib davom et" desa: JONLI holatdan boshla —
-loglarni tekshir (railway logs), sinov qanday ketayotganini so'ra, raqam xatosi bo'lsa tuzat.
+**Muhim:** hozir hisobotlar adminga. OCHISH = Railway'da DRY_RUN=false + `railway up`. Ochishdan
+oldin agentlar DRY_RUN=true holatida ham ulanib /bugun sinay oladi (nazoratni qo'ldan chiqarmaslik).
+
+**Keyingi chatда "DAVOM.md o'qib davom et" desa:** JONLI holat — sinov/ulanish qanday ketyapti
+so'ra; agentlar ulanayotган bo'lsa admin tasdiqni kuzat; hammasi joyida bo'lsa DRY_RUN=false ga
+tayyorlan. Raqam xatosi bo'lsa tuzat + `railway up`.
+
+**TROUBLESHOOTING (saqlab qo'yilgan):** "hisobot bo'sh / summa 0" → sync guard tuzatgan (#1 yuqorida).
+Lokalda takror: `run_sync('m','fast')` → `DayContext(today)` → summalar to'la. Railway sync tekshiruvi:
+`railway logs | grep TO'LIQ` ("executed successfully" ko'rinishi kerak).
