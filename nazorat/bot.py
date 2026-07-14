@@ -26,7 +26,9 @@ from db import get_conn, init_db
 from . import storage
 from .build import DayContext
 from .cards import (render_ball_card, render_debt_card, render_group_daily,
-                    render_plan_card, render_returns_card, render_toy_card)
+                    render_plan_card, render_returns_card,
+                    render_supervisor_daily, render_supervisor_debt,
+                    render_supervisor_monthly, render_toy_card)
 from .core.rules import load_agents
 from .nz_config import ADMIN_IDS, DRY_RUN, NAZORAT_BOT_TOKEN
 from .storage import init_nz_tables
@@ -52,6 +54,18 @@ ADMIN_KB = ReplyKeyboardMarkup(
     [["👥 Ulanganlar"]],
     resize_keyboard=True,
 )
+
+# Supervayzer uchun tugmalar (liga jadvallari)
+SUPERVISOR_KB = ReplyKeyboardMarkup(
+    [["📊 Oylik jadval", "📋 Kunlik jadval"],
+     ["💳 Qarz-vazvrat"]],
+    resize_keyboard=True,
+)
+
+
+def _sup_league(binding) -> str | None:
+    sup = CODE_TO_SUP.get((binding["code"] or "").upper())
+    return sup.league if sup else None
 
 
 def _period(dc) -> str:
@@ -93,6 +107,11 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "✅ Siz ulangansiz. Quyidagi tugmalardan foydalaning 👇",
             reply_markup=AGENT_KB)
         return
+    if b and b["role"] == "supervisor":
+        await update.message.reply_text(
+            "✅ Siz ulangansiz (supervayzer). Quyidagi tugmalardan foydalaning 👇",
+            reply_markup=SUPERVISOR_KB)
+        return
     await update.message.reply_text(WELCOME, parse_mode=ParseMode.HTML)
 
 
@@ -111,6 +130,13 @@ async def on_text(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
     # Allaqachon ulangan — FAQAT tugmalar ishlaydi (matn yozsa — tugmalarni eslatadi)
     if binding:
+        if binding["role"] == "supervisor":
+            h = SUP_BUTTON_HANDLERS.get(raw)
+            if h:
+                return await h(update, ctx)
+            await update.message.reply_text(
+                "⌨️ Pastdagi tugmalardan foydalaning 👇", reply_markup=SUPERVISOR_KB)
+            return
         handler = BUTTON_HANDLERS.get(raw)
         if handler:
             return await handler(update, ctx)
@@ -259,6 +285,47 @@ async def cmd_yordam(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ---- Supervayzer buyruqlari (liga jadvallari) ----
+
+async def cmd_sup_oylik(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    b = await _get_binding(update.effective_chat.id)
+    if not b or b["role"] != "supervisor":
+        return await update.message.reply_text("Avval kodingizni yuboring: /start")
+    league = _sup_league(b)
+    if not league:
+        return await update.message.reply_text("Liga aniqlanmadi.")
+    dc = DayContext()
+    await update.message.reply_photo(
+        render_supervisor_monthly(dc.supervisor_monthly(league)),
+        caption=f"📊 Oylik jadval · strike + oy savdo + ball ({_period(dc)})")
+
+
+async def cmd_sup_kunlik(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    b = await _get_binding(update.effective_chat.id)
+    if not b or b["role"] != "supervisor":
+        return await update.message.reply_text("Avval kodingizni yuboring: /start")
+    league = _sup_league(b)
+    if not league:
+        return await update.message.reply_text("Liga aniqlanmadi.")
+    dc = DayContext()
+    await update.message.reply_photo(
+        render_supervisor_daily(dc.supervisor_daily(league)),
+        caption="📋 Kunlik jadval · bugungi savdo/ball/vizit")
+
+
+async def cmd_sup_qarz(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    b = await _get_binding(update.effective_chat.id)
+    if not b or b["role"] != "supervisor":
+        return await update.message.reply_text("Avval kodingizni yuboring: /start")
+    league = _sup_league(b)
+    if not league:
+        return await update.message.reply_text("Liga aniqlanmadi.")
+    dc = DayContext()
+    await update.message.reply_photo(
+        render_supervisor_debt(dc.supervisor_debt(league)),
+        caption=f"💳 Qarz-vazvrat · agent bo'yicha ({_period(dc)})")
+
+
 async def _send_self_report(app, chat_id: int, binding):
     if binding["role"] == "agent":
         dc = DayContext()
@@ -320,6 +387,11 @@ async def on_bind_decision(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 target, f"✅ Ulandingiz!\n👤 {name}\n"
                         f"Har kuni 10:00 (qarz/vazvrat) va 20:00 (natija) da hisobot keladi.\n"
                         f"Quyidagi tugmalardan foydalaning 👇", reply_markup=AGENT_KB)
+        elif role == "supervisor":
+            await ctx.application.bot.send_message(
+                target, f"✅ Ulandingiz!\n👤 {name} (supervayzer)\n"
+                        f"Ligangiz jadvallari har kuni keladi. Tugmalardan foydalaning 👇",
+                reply_markup=SUPERVISOR_KB)
         else:
             await ctx.application.bot.send_message(target, f"✅ Ulandingiz!\n👤 {name}")
     except TelegramError:
@@ -429,4 +501,11 @@ BUTTON_HANDLERS = {
     "💳 Qarzlar": cmd_qarz,
     "↩️ Vazvratlar": cmd_vazvrat,
     "❓ Yordam": cmd_yordam,
+}
+
+# Supervayzer tugmalari → funksiya
+SUP_BUTTON_HANDLERS = {
+    "📊 Oylik jadval": cmd_sup_oylik,
+    "📋 Kunlik jadval": cmd_sup_kunlik,
+    "💳 Qarz-vazvrat": cmd_sup_qarz,
 }
