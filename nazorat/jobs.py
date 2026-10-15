@@ -45,6 +45,15 @@ except Exception as _sup_err:                       # noqa: BLE001
     logger.error("sup_cards yuklanmadi: %s", _sup_err)
 
 
+# Supervayzer «Plan jadvali» — yo'nalish plani 1 mlrd (egasi tasdiqlagan, 2026-10-15).
+# Yuklanmasa — qolgan kechki hisobotlar ishlayveradi (bot yiqilmaydi).
+try:
+    from . import sup_plan
+except Exception as _plan_err:                      # noqa: BLE001
+    sup_plan = None
+    logger.error("sup_plan yuklanmadi: %s", _plan_err)
+
+
 def sup_monthly_png(dc: DayContext, league: str) -> bytes:
     if sup_cards:
         return sup_cards.monthly_png(dc, league)
@@ -320,6 +329,10 @@ async def evening_job(app: Application):
             app, lg, sup_monthly_png(dc, lg), day, "monthly"), f"{league}/oylik")
         await _guard(rep, "supervayzer", lambda lg=league: _send_supervisor(
             app, lg, sup_daily_png(dc, lg), day, "daily"), f"{league}/kunlik")
+        # Plan jadvali — yakshanba (dam olish kuni) yuborilmaydi
+        if sup_plan and today.weekday() != 6:
+            await _guard(rep, "supervayzer", lambda lg=league: _send_supervisor(
+                app, lg, sup_plan.plan_png(dc, lg), day, "plan"), f"{league}/plan")
 
     # GPS kunlik xulosa (admin doim; supervayzerlar NZ_GPS_TO_SUPERVISORS=1 bo'lsa).
     # O'zi ichida liga bo'yicha himoyalangan — shuning uchun _guard'siz chaqiriladi.

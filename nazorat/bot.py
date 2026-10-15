@@ -30,7 +30,7 @@ from .cards import (render_ball_card, render_debt_card, render_debt_control,
                     render_plan_card, render_returns_card,
                     render_supervisor_debt, render_toy_card)
 from .core.rules import load_agents
-from .jobs import sup_daily_png, sup_monthly_png
+from .jobs import sup_daily_png, sup_monthly_png, sup_plan
 from .nz_config import (ADMIN_IDS, DRY_RUN, EVENING_HOUR, EVENING_MINUTE,
                         NAZORAT_BOT_TOKEN, TIMEZONE)
 from .storage import init_nz_tables
@@ -673,6 +673,9 @@ async def on_send_sample(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                                      caption=f"📊 Oylik jadval · strike + oy savdo + aksiya ({p})")
             await app.bot.send_photo(chat, sup_daily_png(dc, league),
                                      caption="📋 Kunlik jadval · bugungi sof savdo/aksiya/vizit")
+            if sup_plan:
+                await app.bot.send_photo(chat, sup_plan.plan_png(dc, league),
+                                         caption=f"🎯 Plan jadvali · yo'nalish plani ({p})")
             await app.bot.send_photo(chat, render_supervisor_debt(dc.supervisor_debt(league)),
                                      caption=f"💳 Qarz-vazvrat · agent bo'yicha ({p})")
             await app.bot.send_message(q.message.chat.id,

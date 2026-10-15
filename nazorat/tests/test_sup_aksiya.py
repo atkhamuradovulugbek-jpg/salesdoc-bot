@@ -302,6 +302,7 @@ def test_roles_do_not_mix(sup_env):
 def test_admin_sample_to_supervisor_uses_new_tables(sup_env, monkeypatch):
     monkeypatch.setattr(bot, "ADMIN_IDS", {999})
     monkeypatch.setattr(bot, "render_supervisor_debt", lambda x: b"QARZ")
+    monkeypatch.setattr(bot.sup_plan, "plan_png", lambda dc, lg: f"P:{lg}".encode())
     sent = []
 
     class FB:
@@ -318,4 +319,29 @@ def test_admin_sample_to_supervisor_uses_new_tables(sup_env, monkeypatch):
     asyncio.run(bot.on_send_sample(SimpleNamespace(callback_query=q),
                                    SimpleNamespace(application=SimpleNamespace(bot=FB()))))
     photos = [p for chat, p, _ in sent if chat == 333 and p]
-    assert photos == [b"M:city", b"D:city", b"QARZ"]
+    assert photos == [b"M:city", b"D:city", b"P:city", b"QARZ"]
+
+
+# ── Supervayzer PLAN JADVALI (2026-10-15, yo'nalish plani) ───────
+
+def test_sup_plan_numbers(monkeypatch):
+    from nazorat import sup_plan as sp
+    monkeypatch.setattr(sp, "monthly_plan", lambda: {"city": 270_000_000, "region": 1_000_000_000})
+    order("c1", date(2026, 10, 6), 6_000_000)
+    order("c1", OCT7, 3_000_000)
+    order("c2", OCT7, 9_000_000)
+    x = sp.plan_dict(ctx(OCT7), "city")
+    # oktabr: 27 ish kuni (yakshanbasiz); 7-oktabrgacha 6 kun ishlandi, 21 qoldi
+    assert (x["wd_total"], x["wd_passed"], x["wd_rem"]) == (27, 6, 21)
+    assert (x["done"], x["today"]) == (18_000_000, 12_000_000)
+    assert x["need_today"] == 12_000_000          # (270 − 6) ÷ 22
+    assert x["need_next"] == 12_000_000           # (270 − 18) ÷ 21
+    assert x["share"] == 4_000_000                # 12 mln ÷ 3 agent
+    assert (x["avg"], x["prognoz"], x["gap"]) == (3_000_000, 81_000_000, 189_000_000)
+    assert [r["name"].split()[0] for r in x["focus"]] == ["Samiya", "Jalolov"]
+    assert Image.open(BytesIO(sp.render(x))).size[0] == 1080
+
+
+def test_sup_plan_in_evening_job_not_on_sunday():
+    ev = inspect.getsource(jobs.evening_job)
+    assert "sup_plan.plan_png(dc, lg)" in ev and "today.weekday() != 6" in ev

@@ -1,0 +1,6 @@
+# supervisor_plan.yaml — supervayzerning OYLIK yo'nalish plani (so'm).
+# Egasi tasdiqlagan (2026-10-15): shahar va viloyat ALOHIDA, har biri 1 mlrd.
+# Agentlarning shaxsiy planlari (rules.yaml → monthly_sales_plan) bunga BOG'LIQ EMAS.
+monthly_plan:
+  city: 1_000_000_000
+  region: 1_000_000_000
