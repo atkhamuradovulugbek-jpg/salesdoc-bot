@@ -20,3 +20,9 @@ diagnose2.py
 test_sync.py
 sample_order.json
 .pytest_cache/
+
+# SQLite yordamchi fayllari va ma'umot nusxalari
+bot.db-shm
+bot.db-wal
+*.psv
+.claude/settings.local.json

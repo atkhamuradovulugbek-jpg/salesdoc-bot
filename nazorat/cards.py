@@ -965,3 +965,185 @@ def render_month_final(x: dict) -> bytes:
     c.callout(x.get("note", "Yangi oy — yangi o'yin: hamma noldan boshlaydi!"), "pink", label="")
     c.footer("Vazvratlar hisobga olingan yakuniy natija. 1-o'rin ketma-ket 2 oy berilmaydi.")
     return c.png()
+
+
+# ==================================================================
+# 8. GPS KUNLIK XULOSA (supervayzer + admin, 20:10)
+# ==================================================================
+
+_GPS_VAL = {"bad": RED, "warn": AMBER, "ok": (214, 224, 236)}
+_GPS_ROW = {"red": _mix(BG, RED, 0.10), "amber": _mix(BG, AMBER, 0.07)}
+
+
+def _gps_def_block(c, title, body, accent):
+    """Pastdagi izoh bloki (rangli ramka + sarlavha + matn)."""
+    f_t, f_b = _font(22, bold=True), _font(21)
+    lines = c._wrap(body, f_b, W - 2 * PAD - 60)
+    h = 24 + 34 + len(lines) * 29 + 18
+    c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h], 14,
+                          fill=_mix(BG, accent, 0.09), outline=_mix(BG, accent, 0.35), width=2)
+    c.d.text((PAD + 26, c.y + 20), title, font=f_t, fill=accent)
+    yy = c.y + 20 + 34
+    for ln in lines:
+        c.d.text((PAD + 26, yy), ln, font=f_b, fill=(199, 211, 224))
+        yy += 29
+    c.y += h + 12
+
+
+def render_gps_summary(x: dict) -> bytes:
+    """GPS kunlik xulosa: 1-vizit | oxirgi | jami | soxta | tez.
+    Muammolilar tepada, qizil/sariq qator fonlari, emoji ikonkasiz."""
+    c = Card()
+    c.header("GPS kunlik xulosa", x["date_label"], x["title"],
+             "Bugungi vizitlar holati · muammolilar tepada")
+
+    # Ustun sarlavhalari: katta yorliq + ostida kichik izoh (soat/soni)
+    cols = [(430, "1-VIZIT", "soat"), (565, "OXIRGI", "soat"),
+            (700, "JAMI", "vizit"), (830, "SOXTA", "vizit"), (955, "TEZ", "vizit")]
+    c.d.text((PAD, c.y), "AGENT", font=_font(17, bold=True), fill=MUTED)
+    fh, fs = _font(17, bold=True), _font(14)
+    for cx, label, sub in cols:
+        lw = c.d.textlength(label, font=fh)
+        c.d.text((cx - lw / 2, c.y), label, font=fh, fill=MUTED)
+        sw = c.d.textlength(sub, font=fs)
+        c.d.text((cx - sw / 2, c.y + 22), sub, font=fs, fill=(88, 104, 124))
+    c.y += 48
+    c.d.line([(PAD, c.y), (W - PAD, c.y)], fill=EDGE, width=2)
+    c.gap(6)
+
+    fn, ft, fv = _font(25, bold=True), _font(16), _font(25, bold=True)
+    row_h = 64
+    for r in x["rows"]:
+        if r["sev"] in _GPS_ROW:
+            c.d.rounded_rectangle([PAD - 14, c.y - 5, W - PAD + 14, c.y + row_h - 13], 10,
+                                  fill=_GPS_ROW[r["sev"]])
+        c.d.text((PAD, c.y + 2), _san(r["name"])[:16], font=fn, fill=(237, 243, 250))
+        c.d.text((PAD, c.y + 33), _san(r["terr"])[:30], font=ft, fill=MUTED)
+        vals = [(430, r["first"], r["first_col"]), (565, r["last"], r["last_col"]),
+                (700, str(r["total"]), r["total_col"]),
+                (830, str(r["fake"]), r["fake_col"]), (955, str(r["fast"]), r["fast_col"])]
+        for cx, txt, colkey in vals:
+            zero = txt in ("—", "0")
+            col = MUTED if zero and colkey == "ok" else _GPS_VAL.get(colkey, (214, 224, 236))
+            if txt == "0" and colkey == "bad":
+                col = RED
+            tw = c.d.textlength(txt, font=fv)
+            c.d.text((cx - tw / 2, c.y + 8), txt, font=fv, fill=col)
+        c.y += row_h
+        c.d.line([(PAD, c.y - 10), (W - PAD, c.y - 10)], fill=HAIR, width=1)
+    c.gap(14)
+
+    _gps_def_block(c, "SOXTA VIZIT NIMA?",
+                   "Agent \"do'konga kirdim\" deb belgilagan, lekin GPS uni o'sha do'konda "
+                   "ko'rsatmagan. Ya'ni do'konga bormasdan turib belgilagan bo'lishi mumkin "
+                   "(yoki telefonida GPS o'chirib qo'yilgan).", RED)
+    _gps_def_block(c, "TEZ VIZIT NIMA?",
+                   "Do'konda 1 daqiqadan kam turilgan vizit. Kirib-chiqib belgilab ketilgan — "
+                   "1 daqiqada haqiqiy savdo suhbati qilib bo'lmaydi.", AMBER)
+
+    c.footer("Qizil qator — jiddiy muammo (ishlamagan / soxta-tez juda ko'p / yarim kun). "
+             "Sariq — e'tibor kerak. Rangsiz — normal kun.")
+    return c.png()
+
+
+# ==================================================================
+# 9. QARZ NAZORATI (2026-08-13) — dastafshiklar limitni bilmay qarzga
+#    berib yuborayotgani uchun alohida nazoratchi roli qo'shildi.
+#    Ikki ko'rinish: "tugma" (hozirgi holat) va "kechki" (ertangi kunga qaror).
+# ==================================================================
+
+def _debt_header(c, title, date_label, subtitle):
+    logo = _logo(52)
+    if logo is not None:
+        c.img.paste(logo, (PAD, c.y), logo)
+    c.d.text((PAD + (logo.width + 18 if logo else 0), c.y + 4),
+             title.upper(), font=_font(22, bold=True), fill=PINK_SOFT)
+    dw = c.d.textlength(date_label, font=_font(22, bold=True))
+    c.d.text((W - PAD - dw, c.y + 6), date_label, font=_font(22, bold=True), fill=SUB)
+    c.y += 62
+    c.d.text((PAD, c.y), subtitle, font=_font(17), fill=MUTED)
+    c.y += 28
+    c.d.line([(PAD, c.y), (W - PAD, c.y)], fill=EDGE, width=2)
+    c.gap(12)
+
+
+def _debt_verdict_band(c, blocked: int, allowed: int):
+    """Tepadagi katta xulosa — nazoratchi birinchi shuni ko'radi."""
+    h = 96
+    c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h], 18, fill=TILE)
+    c.d.rounded_rectangle([PAD, c.y, PAD + 8, c.y + h], 4, fill=RED if blocked else GREEN)
+    c.d.text((PAD + 30, c.y + 16), "ERTANGI KUNGA", font=_font(19, bold=True), fill=MUTED)
+    c.d.text((PAD + 30, c.y + 44), f"{allowed} ta agentga MUMKIN",
+             font=_font(30, bold=True), fill=GREEN)
+    t = f"{blocked} ta agentga BERILMASIN"
+    tw = c.d.textlength(t, font=_font(30, bold=True))
+    c.d.text((W - PAD - tw - 30, c.y + 44), t, font=_font(30, bold=True), fill=RED)
+    c.y += h + 16
+
+
+def render_debt_control(x: dict) -> bytes:
+    """Qarz nazorati kartasi.
+
+    x = {title, date_label, mode ('tugma'|'kechki'), rows:[{name, area, debt, limit, pct}]}
+    Qatorlar limitdan oshgani YUQORIDA bo'lishi kutiladi (chaqiruvchi saralaydi).
+    """
+    mode = x.get("mode", "tugma")
+    rows = x["rows"]
+    c = Card()
+    if mode == "tugma":
+        _debt_header(c, f"HOZIRGI QARZLAR · {x['title']}", x["date_label"],
+                     "Ayni shu daqiqadagi holat · limitdan oshganlar yuqorida")
+    else:
+        _debt_header(c, f"QARZ NAZORATI · {x['title']}", x["date_label"],
+                     "Ertangi kunga qaror · dastafshiklarni ogohlantiring")
+
+    blocked = sum(1 for r in rows if r["debt"] > r["limit"])
+    if mode == "kechki":
+        _debt_verdict_band(c, blocked, len(rows) - blocked)
+
+    for r in rows:
+        over = r["debt"] > r["limit"]
+        near = not over and r["limit"] and r["debt"] >= r["limit"] * 0.9
+        col = RED if over else (AMBER if near else GREEN)
+        h = 76
+        c.d.rounded_rectangle([PAD, c.y, W - PAD, c.y + h], 14, fill=TILE)
+        c.d.rounded_rectangle([PAD, c.y, PAD + 6, c.y + h], 3, fill=col)
+
+        c.d.text((PAD + 24, c.y + 12), r["name"][:16], font=_font(27, bold=True),
+                 fill=(237, 243, 250))
+        area = r.get("area") or ""
+        c.d.text((PAD + 24, c.y + 47), area[:34],
+                 font=_font(19) if len(area) <= 24 else _font(16), fill=MUTED)
+
+        c.d.text((470, c.y + 10), fmt(r["debt"]), font=_font(28, bold=True), fill=col)
+        c.d.text((470, c.y + 45), f"limit {fmt(r['limit'])}", font=_font(18), fill=MUTED)
+
+        pc = f"{r['pct']:.0f}%"
+        pw = c.d.textlength(pc, font=_font(26, bold=True))
+        c.d.text((790 - pw, c.y + 22), pc, font=_font(26, bold=True), fill=col)
+
+        if mode == "kechki":
+            label = "BERILMASIN" if over else ("EHTIYOT" if near else "MUMKIN")
+            bg = (58, 26, 32) if over else ((58, 46, 20) if near else (22, 48, 34))
+            bw = 200
+            c.d.rounded_rectangle([W - PAD - bw - 14, c.y + 18, W - PAD - 14, c.y + 58],
+                                  12, fill=bg)
+            lw = c.d.textlength(label, font=_font(21, bold=True))
+            c.d.text((W - PAD - bw - 14 + (bw - lw) / 2, c.y + 28), label,
+                     font=_font(21, bold=True), fill=col)
+        c.y += h + 9
+
+    c.gap(6)
+    _big_tile(c, f"{x['title']} jami qarz", f"{fmt(sum(r['debt'] for r in rows))} so'm",
+              RED, icon_name="debt")
+    if mode == "tugma":
+        _big_tile(c, "Limitdan oshgan", f"{blocked} ta agent",
+                  RED if blocked else GREEN, icon_name="debt")
+        c.footer("Qizil — limitdan oshgan · Sariq — limitga yaqin (90%+) · "
+                 "Yashil — normal. Agent ismiga bosib qaysi do'kon qarzda "
+                 "ekanini ko'rish mumkin.")
+    else:
+        c.footer("Ertalab dastafshiklarga ayting: QIZIL belgililarga mahsulot "
+                 "berilmasin, SARIQ — ehtiyot bo'ling. Qarz tushgach avtomatik "
+                 "MUMKIN bo'ladi.")
+    return c.png()

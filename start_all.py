@@ -1,19 +1,27 @@
 """
-start_all.py — Railway'da ikkala botni bitta konteynerda ishga tushiradi:
+start_all.py — Railway'da uchala jarayonni bitta konteynerda ishga tushiradi:
   1. bot.py            — asosiy salesdoc-bot (adminlar monitoringi)
   2. nazorat.run       — Siribom Nazorat bot (agentlar motivatsiyasi)
+  3. webadmin.main     — admin web dastur (FAQAT O'QIYDI, PIN bilan)
 
-Ikkalasi bitta bot.db'ni ulashadi (WAL + busy_timeout). Har biri alohida
-jarayon; biri yiqilsa qayta ishga tushadi, ikkinchisiga xalaqit bermaydi.
+Uchalasi bitta bot.db'ni ulashadi (WAL + busy_timeout). Har biri alohida
+jarayon; biri yiqilsa qayta ishga tushadi, boshqalariga xalaqit bermaydi.
+Web dastur bazaga hech narsa yozmaydi — botlarni buzmaydi.
 """
 
+import os
 import subprocess
 import sys
 import time
 
+# Railway ochiq port beradi (domen ulangach). Bo'lmasa 8000.
+_PORT = os.getenv("PORT", "8000")
+
 PROCS = [
     ("asosiy-bot", [sys.executable, "bot.py"]),
     ("nazorat-bot", [sys.executable, "-m", "nazorat.run"]),
+    ("web", [sys.executable, "-m", "uvicorn", "webadmin.main:app",
+             "--host", "0.0.0.0", "--port", _PORT, "--workers", "1"]),
 ]
 
 RESTART_DELAY = 10  # sekund

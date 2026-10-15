@@ -62,18 +62,39 @@ agents:
     code: TSH-SHT-01
     ball_plan: 50
 
-  # Mirzo Ulug'bek o'rindig'i: Jumagul ketdi, o'rniga Behruz Eshpo'latov keldi (2026-07-10).
-  # Kuzatuv rejimi: ball hisoblanadi, plan/sovrin yo'q. start_date — eski agent savdosi
-  # aralashmasin uchun. Kelajakda o'rindiq ismi o'zgarsa, bot avtomatik aniqlaydi (nz_agent_terms).
+  # Mirzo Ulug'bek o'rindig'i tez-tez almashadi — HOZIRGI agent ismini bot o'zi aniqlaydi
+  # (nz_agent_terms), bu yerdagi ism faqat boshlang'ich nuqta. start_date ham bazadan keladi:
+  # eski agent savdosi yangisiga aralashmasin. 2026-08-06: kuzatuv rejimi olib tashlandi.
   - sd_id: d0_144
     name: "Behruz Eshpo'latov"
     display: Behruz
     area: Mirzo Ulugbek
     league: city
     code: TSH-MUB-01
-    ball_plan: 0
-    observe_only: true
-    start_date: "2026-07-10"
+    ball_plan: 50
+
+  # Sergeli — yangi shahar agenti (2026-07-17 qo'shildi). Sales Doctor'da faol, savdo qilyapti,
+  # lekin yangi bot yaml ro'yxatida yo'q edi → hisobotlarda ko'rinmasdi. code_1c Sales Doctor'da
+  # bo'sh — bot ulanish kodi TSH-SRG-01 berildi. start_date yo'q: u o'rindiq almashuvi emas.
+  # 2026-08-06: kuzatuv rejimi olib tashlandi (egasi qarori — hamma barobar).
+  - sd_id: d0_147
+    name: "Odilova Gulchehra"
+    display: Gulchehra
+    area: Sergeli
+    league: city
+    code: TSH-SRG-01
+    ball_plan: 50
+
+  # Mirobod-Yakkasaroy — yangi shahar agenti (2026-08-05 dan savdo qilyapti, 96 do'kon
+  # biriktirilgan). Sales Doctor'da faol edi, lekin yaml ro'yxatida yo'q → hisobotlarda
+  # UMUMAN ko'rinmayotgan edi (2026-08-06 da topildi). code_1c bo'sh — TSH-MRB-01 berildi.
+  - sd_id: d0_153
+    name: "Mamatov Arthur"
+    display: Arthur
+    area: Mirobod-Yakkasaroy
+    league: city
+    code: TSH-MRB-01
+    ball_plan: 60
 
   # ---------- VILOYAT ----------
   - sd_id: d0_89
@@ -141,3 +162,20 @@ supervisors:
   - code: SPV-TVL-01
     name: Viloyat supervayzeri
     league: region
+
+  # TEST kodi (2026-08-11, egasi so'rovi): egasi supervayzer ekranini O'ZI ko'rib
+  # sinashi uchun. Avtomatik kechki/ertalabki jadvallar bu kodga BORMAYDI —
+  # `jobs.SUPERVISOR_CODES` faqat SPV-TVL-01 ga yuboradi, shuning uchun haqiqiy
+  # supervayzer uzilmaydi va dublikat xabar olmaydi. Faqat tugmalar ishlaydi.
+  - code: SPV-TVL-02
+    name: Viloyat supervayzeri (TEST — egasi)
+    league: region
+
+# QARZ NAZORATCHISI (2026-08-13): dastafshiklar limitni bilmay qarzga berib
+# yuborayotgani uchun alohida ishchi. Liga YO'Q — u shahar va viloyatni birga
+# ko'radi (22:00 da ikkita alohida rasm oladi).
+debt_controllers:
+  - code: QRZ-01
+    name: Qarz nazoratchisi
+  - code: QRZ-02
+    name: Qarz nazoratchisi (TEST — egasi)

@@ -46,14 +46,20 @@ def compute_month_final(year: int, month: int) -> dict[str, dict]:
     # Bir oldingi oy g'oliblari (ketma-ket taqiq uchun)
     ppy, ppm = prev_month(date(year, month, 1))
 
+    # SOVRIN O'CHIRILGANMI (oy varaqasi)? O'sha oyning MUZLATILGAN qoidasi
+    # o'qiladi — keyin o'chirilsa ham eski oy sovrini o'chib ketmaydi.
+    # Podium va o'sish MUSTAQIL: 2026-08 da egasi faqat o'sish sovrinini bekor qildi.
+    prizes_on = dc.period is None or dc.period.prizes_enabled
+    growth_on = dc.period is None or dc.period.growth_enabled
+
     result = {}
     for league in ("city", "region"):
         with get_conn() as conn:
             last_first = storage.last_first_place(conn, ppy, ppm, league)
             last_growth = storage.last_growth_winner(conn, ppy, ppm, league)
 
-        podium = dc.podium_result(league, last_first)
-        growth = dc.growth_result(league, last_growth)
+        podium = dc.podium_result(league, last_first) if prizes_on else None
+        growth = dc.growth_result(league, last_growth) if growth_on else None
 
         # Toy g'oliblari (darajaga yetganlar)
         toy_winners = []
@@ -65,7 +71,7 @@ def compute_month_final(year: int, month: int) -> dict[str, dict]:
             "league_label": "Shahar ligasi" if league == "city" else "Viloyat ligasi",
             "month_label": _month_label(month),
             "podium": [(pl, e.name, e.total_ball, e.over, prize)
-                       for pl, e, prize in podium.winners],
+                       for pl, e, prize in podium.winners] if podium else [],
             "growth": (growth.name, growth.growth_pct, load_rules().growth.prize) if growth else None,
             "toy_winners": toy_winners,
             "note": "Yangi oy — yangi o'yin: hamma noldan boshlaydi!",
@@ -75,7 +81,7 @@ def compute_month_final(year: int, month: int) -> dict[str, dict]:
         # Tarixga saqlaymiz (keyingi oy taqiqlari uchun)
         payload = {
             "podium": [{"place": pl, "sd_id": e.sd_id, "prize": prize}
-                       for pl, e, prize in podium.winners],
+                       for pl, e, prize in podium.winners] if podium else [],
             "growth": {"sd_id": growth.sd_id, "pct": growth.growth_pct} if growth else None,
         }
         with get_conn() as conn:

@@ -9,7 +9,7 @@ from datetime import date, timedelta
 
 from db import get_conn
 
-from . import storage
+from . import period, roster, storage
 from .core.growth import GrowthEntry, growth_winner
 from .core.podium import PodiumEntry, daily_rating, rank_podium
 from .core.rules import Rules, load_agents, load_rules
@@ -28,14 +28,20 @@ class DayContext:
     """Bir kun uchun barcha agentlarning snapshotlari + liga hisoblari (bir marta o'qiydi)."""
 
     def __init__(self, today: date | None = None,
-                 rules: Rules | None = None, agents_cfg=None):
+                 rules: Rules | None = None, agents_cfg=None,
+                 plan_override: dict[str, int] | None = None):
         self.today = today or date.today()
         self.rules = rules or load_rules()
         self.agents_cfg = agents_cfg or load_agents()
+        # NAMUNA uchun: hali e'lon qilinmagan qoralama ball planini sinab ko'rish
+        # (kartani HAQIQIY ko'rinishda chizib adminga ko'rsatish). Faqat shu obyekt
+        # ichida — bazaga hech narsa yozilmaydi.
+        self.plan_override = plan_override or {}
         self.agents = self.agents_cfg.agents
         self.by_league: dict[str, list[AgentSnapshot]] = {"city": [], "region": []}
         self.snap: dict[str, AgentSnapshot] = {}
         self._growth_pct: dict[str, float | None] = {}
+        self.period = None            # shu sanaga amal qiladigan «oy varaqasi» (period.Resolved)
         self._load()
 
     def _load(self):
@@ -45,17 +51,19 @@ class DayContext:
         prev_to = (self.today.replace(day=1) - timedelta(days=1)).isoformat()
         st = self.rules.statuses_ok
         with get_conn() as conn:
+            # RO'YXAT MANBASI — roster.py (yagona joy, 2026-07-30). Sales Doctor'da
+            # active='N' (ishdan ketgan) agent hamma joydan chiqadi; YAML faqat bezaydi.
+            # day=self.today — ball plani HISOBOT SANASIGA amal qiladigan «oy
+            # varaqasi»dan olinadi ("hozirgi"dan emas). Shu bilan kechagi karta va
+            # oy yakuni o'sha paytdagi qoida bilan to'g'ri qayta hisoblanadi.
+            self.agents = roster.active_agents(conn, self.agents_cfg, day=self.today)
+            self.period = period.resolve(conn, self.today)
+            for ag in self.agents:                   # qoralama namunasi (bazaga tegmaydi)
+                if ag.sd_id in self.plan_override:
+                    ag.ball_plan = int(self.plan_override[ag.sd_id])
+            # Eslatma: o'rindiq holati (yangi ism/kuzatuv/start_date) va ball plani
+            # `roster` ichida allaqachon qo'llangan — bu yerda takrorlanmaydi.
             for ag in self.agents:
-                # O'rindiqda yangi agent aniqlangan bo'lsa — start_date/kuzatuv/qisqa ismni
-                # qo'llaymiz (faqat o'qiydi; yozish/aniqlash jobs'da bir marta bo'ladi).
-                _term = storage.get_agent_term(conn, ag.sd_id)
-                if _term:
-                    if _term["start_date"]:
-                        ag.start_date = _term["start_date"]
-                    if _term["observe_until"] and self.today.isoformat() <= _term["observe_until"]:
-                        ag.observe_only = True
-                    if _term["is_new"] and _term["short_name"]:
-                        ag.display = _term["short_name"]
                 s = AgentSnapshot(conn, ag, self.rules, self.today)
                 self.snap[ag.sd_id] = s
                 self.by_league[ag.league].append(s)
@@ -66,6 +74,11 @@ class DayContext:
                     self._growth_pct[ag.sd_id] = (cur_net - prev_net) / prev_net * 100
                 else:
                     self._growth_pct[ag.sd_id] = None
+
+        # INVARIANT: dc.agents == dc.snap kalitlari. Barcha "for ag in dc.agents" sikllari
+        # (kechki/ertalabki/ogohlantirish joblari) faqat snapshot bor agentni ko'radi —
+        # d0_152 kabi KeyError qaytmaydi.
+        self.agents = [a for a in self.agents if a.sd_id in self.snap]
 
     # ---------- shaxsiy kartalar ----------
 
@@ -147,9 +160,10 @@ class DayContext:
         """Guruhga kunlik ball reytingi (yig'indisiz)."""
         entries = []
         for s in self.by_league[league]:
-            if s.agent.observe_only:
-                continue
-            entries.append({"sd_id": s.agent.sd_id, "name": s.agent.short,
+            # Kuzatuv rejimidagi (yangi) agent ham reytingda ko'rinadi — "(yangi)" belgisi
+            # bilan (foydalanuvchi qarori 2026-07-15). Podium/sovrinda baribir qatnashmaydi.
+            name = s.agent.short + (" (yangi)" if s.agent.observe_only else "")
+            entries.append({"sd_id": s.agent.sd_id, "name": name,
                             "ball": s.today_ball, "sales": s.today_sales})
         rating = daily_rating(entries)
         rows = [(e["name"], e["ball"], e["sales"]) for e in rating]

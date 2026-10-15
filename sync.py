@@ -66,8 +66,16 @@ _sync_lock = asyncio.Lock()
 async def run_sync(sync_type: str = "scheduled", progress_cb=None, mode: str = "full") -> str:
     """
     Sales Doctor → SQLite.
-    mode='full' — hammasini tortadi (~10-15 min)
-    mode='fast' — faqat tez o'zgaradiganlarini (balans, ombor, bugungi vizit/buyurtma, ~2-3 min)
+    mode='full'  — hammasini tortadi (~10-15 min)
+    mode='fast'  — balans, ombor, shu oyning vizit/buyurtmalari (~2-3 min)
+    mode='today' — FAQAT bugungi buyurtma va vizit (~5 soniya)
+    mode='debt'  — FAQAT mijoz balanslari = qarz (~12 soniya)
+
+    'today' nima uchun kerak: supervayzer jadval bosganda bot bazadan o'qiydi, baza
+    esa kuniga 6 marta yangilanadi — soat 17:00 da 15:00 dagi raqam ko'rinardi.
+    O'lchandi (2026-08-11): oylik buyurtma 25s + balans 11s, bugungi buyurtma esa
+    atigi 2.1s + vizit 2.4s. Qarz/ombor/oylik tarix kun davomida deyarli
+    o'zgarmaydi — shuning uchun ular tortilmaydi.
     """
     if _sync_lock.locked():
         return "busy"
@@ -82,7 +90,9 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
 
     # FAST mode: shu oy boshidan (oylik summalar Sales Doctor bilan doim to'g'ri).
     # FULL mode: 90 kun (o'lik do'kon va eski hisobotlar uchun).
-    if mode == "fast":
+    if mode == "today":
+        lookback_from = today                       # faqat bugun
+    elif mode == "fast":
         lookback_from = date.today().replace(day=1).isoformat()
     else:
         lookback_from = (date.today() - timedelta(days=DEAD_OUTLET_LOOKBACK_DAYS)).isoformat()
@@ -123,27 +133,45 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
             products = await api.get_products();  logger.info("✓ products: %d", len(products))
 
         # Dinamik ma'lumotlar (har doim tortiladi)
-        await progress(f"💳 Qarz/balanslar tortilmoqda...")
-        balances = await api.get_balance();   logger.info("✓ balances: %d", len(balances))
+        # TODAY rejimida qarz va ombor TORTILMAYDI — ular kun davomida deyarli
+        # o'zgarmaydi, lekin eng sekin so'rovlar (11s + 0.5s).
+        balances = []
+        warehouses = []
+        if mode == "debt":
+            # QARZ NAZORATI: faqat balanslar. Ombor/vizit/buyurtma tortilmaydi —
+            # ular bu yerda kerak emas va eng ko'p vaqt oladi.
+            await progress(f"💳 Qarz/balanslar tortilmoqda...")
+            balances = await api.get_balance();   logger.info("✓ balances: %d", len(balances))
+        elif mode != "today":
+            await progress(f"💳 Qarz/balanslar tortilmoqda...")
+            balances = await api.get_balance();   logger.info("✓ balances: %d", len(balances))
 
-        await progress(f"🏭 Ombor qoldiqlari tortilmoqda...")
-        warehouses = await api.get_stock();   logger.info("✓ warehouses: %d", len(warehouses))
+            await progress(f"🏭 Ombor qoldiqlari tortilmoqda...")
+            warehouses = await api.get_stock();   logger.info("✓ warehouses: %d", len(warehouses))
 
-        await progress(f"🚶 Vizitlar tortilmoqda...")
-        # Shu oy boshidan — strike rate (kirgan/sotgan) oylik hisoblanishi uchun.
-        visit_from = date.today().replace(day=1).isoformat()
-        visits = await api.get_visits(visit_from, today); logger.info("✓ visits: %d", len(visits))
+        if mode == "debt":
+            visits = []
+        else:
+            await progress(f"🚶 Vizitlar tortilmoqda...")
+            # Shu oy boshidan — strike rate (kirgan/sotgan) oylik hisoblanishi uchun.
+            # TODAY rejimida faqat bugun: strike'ning bugungi qismi yangilanadi.
+            visit_from = today if mode == "today" else date.today().replace(day=1).isoformat()
+            visits = await api.get_visits(visit_from, today)
+            logger.info("✓ visits: %d", len(visits))
 
         if mode == "full":
             await progress(f"🏪 Mijozlar tortilmoqda... <i>(ko'p ma'lumot)</i>")
             clients = await api.get_clients();    logger.info("✓ clients: %d", len(clients))
 
-        await progress(f"💰 Buyurtmalar tortilmoqda...")
-        # status 1,2,3 = savdo; 4 = to'liq vazvrat (asosiy bot doim status IN (1,2,3)
-        # filtrlaydi, shuning uchun status 4 uni buzmaydi; nazorat boti vazvrat
-        # hisobotida ishlatadi).
-        orders = await api.get_orders(lookback_from, today, statuses=[1, 2, 3, 4])
-        logger.info("✓ orders: %d", len(orders))
+        orders = []
+        if mode == "debt":
+            pass                                    # buyurtma kerak emas
+        else:
+            await progress(f"💰 Buyurtmalar tortilmoqda...")
+            # status 1,2,3 = savdo; 4 = to'liq vazvrat (asosiy bot doim status
+            # IN (1,2,3) filtrlaydi; nazorat boti vazvrat hisobotida ishlatadi).
+            orders = await api.get_orders(lookback_from, today, statuses=[1, 2, 3, 4])
+            logger.info("✓ orders: %d", len(orders))
 
         await progress(f"💾 Bazaga yozilmoqda...")
 
@@ -369,7 +397,9 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
             # javob — timeout/filtr xatosi), eski buyurtmalarni O'CHIRMAYMIZ. Aks holda
             # DELETE ishlaydi-yu, yangi INSERT bo'lmaydi → savdo 0 ga tushib, hisobot bo'sh
             # chiqadi. Faqat yangi buyurtma KELGANDA eskisini almashtiramiz.
-            if not order_rows:
+            # `debt` rejimida buyurtma ATAYLAB tortilmaydi — bu ogohlantirish emas,
+            # aks holda har soatlik qarz tekshiruvi soxta trevoga bo'lib ko'rinardi.
+            if not order_rows and mode != "debt":
                 logger.warning("⚠️ Buyurtmalar BO'SH qaytdi (%s—%s) — eski ma'lumot SAQLANADI "
                                "(o'chirilmaydi). Sync manbai vaqtincha javob bermagan bo'lishi mumkin.",
                                lookback_from, today)
@@ -413,8 +443,11 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
                     updated_at=excluded.updated_at
             """, balance_rows)
 
-            # Stock — to'liq yangilash
-            conn.execute("DELETE FROM stock")
+            # Stock — to'liq yangilash. SHART MUHIM: ombor tortilmagan bo'lsa
+            # (today rejimi yoki API bo'sh qaytargan holat) jadval O'CHIRILMAYDI —
+            # aks holda sklad ekrani bo'shab qolardi.
+            if stock_rows:
+                conn.execute("DELETE FROM stock")
             conn.executemany("""
                 INSERT INTO stock (product_sd_id, product_name, warehouse, quantity, updated_at)
                 VALUES (?, ?, ?, ?, ?)

@@ -1,0 +1,12 @@
+# Railway'ga YUKLANMAYDI (`railway up` uchun). .gitignore ham amal qiladi.
+# Lokal hujjat / namuna / ma'lumot nusxalari
+handover-assets/
+salesdoc-monitor-handover-*.md
+bot.db-shm
+bot.db-wal
+# Claude Code lokal ruxsatlari — serverga kerak emas
+.claude/settings.local.json
+# Yozilgan, lekin botga ULANMAGAN aksiya moduli (eski qoida) — serverga chiqmasin
+nazorat/aksiya.py
+nazorat/config/aksiya.yaml
+nazorat/tests/test_aksiya.py

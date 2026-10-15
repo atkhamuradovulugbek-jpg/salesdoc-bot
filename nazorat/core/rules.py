@@ -83,6 +83,11 @@ class Agent(BaseModel):
     debt_limit: float | None = None          # alohida limit (bo'lmasa liga standarti)
     start_date: str | None = None            # yangi agent shu sanadan sanaladi (eski agent
                                              # savdosi aralashmasin). None = to'liq oy (eski agent).
+    # O'RINDIQ ALMASHUVI (bazadan, `nz_agent_terms` — roster.apply_terms qo'yadi).
+    # Egasi yangi agentning ismini yodda tutolmaydi, shuning uchun ekranlarda
+    # "yangi ism · sana dan (avval eski ism)" ko'rsatiladi (2026-07-31 so'rovi).
+    seat_changed: bool = False               # o'rindiqda agent almashganmi
+    seat_prev_name: str = ""                 # avvalgi agent ismi (YAML'dagi)
 
     @property
     def short(self) -> str:
@@ -95,9 +100,16 @@ class Supervisor(BaseModel):
     league: str
 
 
+class DebtController(BaseModel):
+    """Qarz nazoratchisi — ligasi yo'q, hamma agentlarni ko'radi (2026-08-13)."""
+    code: str
+    name: str
+
+
 class AgentsConfig(BaseModel):
     agents: list[Agent]
     supervisors: list[Supervisor] = Field(default_factory=list)
+    debt_controllers: list[DebtController] = Field(default_factory=list)
 
 
 def load_rules(path: Path | None = None) -> Rules:

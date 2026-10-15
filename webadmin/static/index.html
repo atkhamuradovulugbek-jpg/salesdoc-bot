@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Siribom Nazorat</title>
+  <meta name="theme-color" content="#0c0a0f">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="apple-touch-icon" href="/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Nazorat">
+  <link rel="stylesheet" href="/style.css?v=12">
+</head>
+<body>
+
+<!-- ══ KIRISH EKRANI ══ -->
+<div id="login-screen" class="hidden">
+  <div class="login-box">
+    <div class="login-logo"><img src="/logo.png" alt="Siribom"></div>
+    <h1>Siribom Nazorat</h1>
+    <p>Boshqaruv paneli — parolni kiriting</p>
+    <div class="pin-row">
+      <input id="pin-input" type="password" autocomplete="current-password"
+             placeholder="Parol">
+      <button id="pin-eye" class="pin-eye" type="button"
+              aria-label="Parolni ko'rsatish">👁</button>
+    </div>
+    <button id="pin-btn" class="btn btn-primary">Kirish</button>
+    <div id="login-error" class="error hidden"></div>
+  </div>
+</div>
+
+<!-- ══ ASOSIY ILOVA ══ -->
+<div id="app" class="hidden">
+
+  <header class="topbar">
+    <div class="topbar-brand">
+      <img src="/logo.png" alt="">
+      <div>
+        <div class="topbar-title">Siribom Nazorat</div>
+        <div id="topbar-date" class="topbar-sub">—</div>
+      </div>
+    </div>
+    <button id="btn-refresh" class="icon-btn" title="Yangilash">⟳</button>
+  </header>
+
+  <!-- ── TAB: BOSH ── -->
+  <main id="tab-bosh" class="tab">
+    <div id="weak-warn" class="weak-warn hidden">
+      🔓 <b>Himoya kuchsiz</b> — hali qisqa PIN ishlatilyapti. Bu dastur savdo va bonus
+      raqamlarini ko'rsatadi. Claude'ga ayting: <b>"parolni o'rnataman"</b>.
+    </div>
+    <div class="hero-card">
+      <div class="hero-label">Bugungi savdo</div>
+      <div id="hero-today" class="hero-num">—</div>
+      <div class="hero-row">
+        <span id="hero-diff" class="hero-diff"></span>
+        <span id="hero-legs" class="hero-legs"></span>
+      </div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-tile"><div class="stat-k">Oylik savdo</div><div id="st-month" class="stat-v">—</div></div>
+      <div class="stat-tile"><div class="stat-k">Prognoz (oy)</div><div id="st-prognoz" class="stat-v">—</div></div>
+      <div class="stat-tile"><div class="stat-k">Agentlar</div><div id="st-agents" class="stat-v">—</div></div>
+      <div class="stat-tile"><div class="stat-k">Ish kuni</div><div id="st-wd" class="stat-v">—</div></div>
+    </div>
+
+    <div class="section-head"><span>⚠️ Diqqat talab</span><span id="sig-count" class="pill">—</span></div>
+    <div id="signals" class="card-list"></div>
+
+    <div class="section-head"><span>🏆 Bugun eng zo'r</span></div>
+    <div id="top-today" class="card-list"></div>
+  </main>
+
+  <!-- ── TAB: SAVDO ── -->
+  <main id="tab-savdo" class="tab hidden">
+    <div class="chips">
+      <button class="chip active" data-per="today">Bugun</button>
+      <button class="chip" data-per="month">Oylik</button>
+    </div>
+    <div id="sales-list" class="card-list"></div>
+  </main>
+
+  <!-- ── TAB: STRIKE (Agentlar) ── -->
+  <main id="tab-strike" class="tab hidden">
+    <div class="explain">
+      <b>Strike rate</b> — kirgan do'konning nechtasiga sotdi. O'sish uchun eng muhim raqam.
+      Eng past tepada.
+    </div>
+    <div class="chips">
+      <button class="chip active" data-lg="all">Hammasi</button>
+      <button class="chip" data-lg="city">Shahar</button>
+      <button class="chip" data-lg="region">Viloyat</button>
+    </div>
+    <div id="strike-list" class="card-list"></div>
+  </main>
+
+  <!-- ── TAB: QARZ / VAZVRAT ── -->
+  <main id="tab-qarz" class="tab hidden">
+    <div class="chips">
+      <button class="chip active" data-qv="debt">💳 Qarz</button>
+      <button class="chip" data-qv="ret">↩️ Vazvrat</button>
+    </div>
+    <div id="qarz-total" class="mini-total"></div>
+    <div id="qarz-list" class="card-list"></div>
+  </main>
+
+  <!-- ── TAB: SKLAD ── -->
+  <main id="tab-sklad" class="tab hidden">
+    <div class="chips">
+      <button class="chip active" data-sk="low">🔴 Tez tugaydigan</button>
+      <button class="chip" data-sk="all">📦 Hammasi</button>
+    </div>
+    <div id="stock-meta" class="mini-total"></div>
+    <div id="stock-list" class="card-list"></div>
+  </main>
+
+  <!-- ── TAB: BOSHQARUV ── -->
+  <main id="tab-boshqaruv" class="tab hidden">
+    <div class="chips">
+      <button class="chip active" data-bq="ulanish">👥 Ulanish</button>
+      <button class="chip" data-bq="yangilash">🔄 Yangilash</button>
+      <button class="chip" data-bq="ballplan">🎯 Ball plan</button>
+    </div>
+
+    <!-- Ulanish bo'limi -->
+    <div id="bq-ulanish">
+      <div id="pending-box"></div>
+      <div class="mini-total">
+        <span>🟢 Ulangan <b id="conn-on">—</b> · 🔴 Ulanmagan <b id="conn-off">—</b></span>
+        <span id="conn-total"></span>
+      </div>
+      <div id="conn-list" class="card-list"></div>
+    </div>
+
+    <!-- Yangilash bo'limi -->
+    <div id="bq-yangilash" class="hidden">
+      <div class="section-card">
+        <h3>🔄 Bazani yangilash</h3>
+        <div id="sync-status" class="sync-status">—</div>
+        <div id="sync-blackout" class="weak-warn hidden"></div>
+        <button id="btn-sync-fast" class="btn btn-primary">⚡ Tez yangilash (2-3 daqiqa)</button>
+        <button id="btn-sync-full" class="btn btn-outline">🔁 To'liq yangilash (10-15 daqiqa)</button>
+        <p class="hint">Tugmani bossangiz — bot yangilaydi. Bu dastur o'zi hech narsa
+          o'zgartirmaydi, shuning uchun hisobotlar buzilmaydi.</p>
+      </div>
+      <div class="section-head"><span>Oxirgi ishlar</span></div>
+      <div id="jobs-list" class="card-list"></div>
+    </div>
+
+    <!-- Ball plan bo'limi («oy varaqasi») -->
+    <div id="bq-ballplan" class="hidden">
+      <div id="bp-head" class="period-head">
+        <div>
+          <div id="bp-month" class="period-month">—</div>
+          <div id="bp-status" class="period-status">—</div>
+        </div>
+        <select id="bp-select" class="period-select"></select>
+      </div>
+
+      <div id="bp-note" class="explain"></div>
+
+      <div class="section-card">
+        <label class="switch-row">
+          <span><b>🏆 Podium sovrini</b><br>
+            <span class="hint">1-o'rin 1.5 mln · 2-o'rin 1 mln · 3-o'rin 500 ming.
+            Har liga alohida. O'chirilsa e'lon qilinmaydi.</span></span>
+          <input id="bp-prizes" type="checkbox" checked>
+        </label>
+        <label class="switch-row" style="margin-top:14px">
+          <span><b>📈 O'sish sovrini</b><br>
+            <span class="hint">700 ming — o'tgan oyga nisbatan savdosi eng ko'p
+            oshgan agentga (kamida +10%).</span></span>
+          <input id="bp-growth" type="checkbox" checked>
+        </label>
+      </div>
+
+      <div class="section-head"><span>Agentlar</span><span id="bp-changed" class="pill">—</span></div>
+      <div id="bp-list" class="card-list"></div>
+
+      <div id="bp-gone" class="card-list"></div>
+
+      <div id="bp-actions" class="section-card">
+        <button id="bp-save" class="btn btn-outline">💾 Saqlash (qoralama)</button>
+        <button id="bp-preview" class="btn btn-outline">👀 Namunani Telegramga yuborish</button>
+        <button id="bp-publish" class="btn btn-primary">📣 E'LON QILISH</button>
+        <p class="hint">Qoralamani agentlar ko'rmaydi. E'lon qilingach varaqa
+          muzlaydi — o'sha oy hisobi keyin ham o'zgarmaydi.</p>
+      </div>
+      <div id="bp-fix" class="section-card hidden">
+        <button id="bp-reopen" class="btn btn-primary">✏️ Tuzatish</button>
+        <p class="hint" id="bp-fix-hint"></p>
+      </div>
+      <div id="bp-hist" class="card-list"></div>
+    </div>
+  </main>
+
+  <!-- ── PASTKI NAVIGATSIYA ── -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-tab="bosh"><span>🏠</span>Bosh</button>
+    <button class="nav-btn" data-tab="savdo"><span>📊</span>Savdo</button>
+    <button class="nav-btn" data-tab="strike"><span>🎯</span>Strike</button>
+    <button class="nav-btn" data-tab="qarz"><span>💳</span>Qarz</button>
+    <button class="nav-btn" data-tab="sklad"><span>📦</span>Sklad</button>
+    <button class="nav-btn" data-tab="boshqaruv"><span>⚙️</span>Boshqaruv</button>
+  </nav>
+</div>
+
+<!-- ══ AGENT BATAFSIL (pastdan chiqadigan to'liq oyna) ══ -->
+<div id="drill" class="drill-overlay hidden">
+  <div class="drill-panel">
+    <div class="drill-grip"></div>
+    <div id="drill-body"><div class="empty">Yuklanmoqda...</div></div>
+    <button id="drill-close" class="btn btn-outline">Yopish</button>
+  </div>
+</div>
+
+<!-- ══ E'LON TASDIG'I (oy nomini yozib tasdiqlash) ══ -->
+<div id="pubconfirm" class="drill-overlay hidden">
+  <div class="drill-panel">
+    <div class="drill-grip"></div>
+    <div class="drill-title">📣 E'lon qilish</div>
+    <div id="pub-text" class="drill-sub"></div>
+    <input id="pub-input" type="text" autocomplete="off" placeholder="Oy nomini yozing">
+    <div id="pub-error" class="error hidden"></div>
+    <button id="pub-ok" class="btn btn-primary">E'lon qilish</button>
+    <button id="pub-cancel" class="btn btn-outline" style="margin-top:9px">Bekor qilish</button>
+  </div>
+</div>
+
+<!-- ══ UZISH TASDIG'I (ism yozib tasdiqlash) ══ -->
+<div id="confirm" class="drill-overlay hidden">
+  <div class="drill-panel">
+    <div class="drill-grip"></div>
+    <div class="drill-title">🔌 Ulanishni uzish</div>
+    <div id="confirm-text" class="drill-sub"></div>
+    <input id="confirm-input" type="text" autocomplete="off" placeholder="Ismni yozing">
+    <div id="confirm-error" class="error hidden"></div>
+    <button id="confirm-ok" class="btn btn-danger">Uzish</button>
+    <button id="confirm-cancel" class="btn btn-outline" style="margin-top:9px">Bekor qilish</button>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/app.js?v=12"></script>
+</body>
+</html>

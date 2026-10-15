@@ -26,6 +26,11 @@ except Exception as _img_err:
     _IMAGE_REPORTS_OK = False
     image_reports = None  # type: ignore
     logging.getLogger(__name__).error("image_reports yuklanmadi: %s", _img_err)
+try:
+    import aksiya_jadval
+except Exception as _aks_err:
+    aksiya_jadval = None  # type: ignore
+    logging.getLogger(__name__).error("aksiya_jadval yuklanmadi: %s", _aks_err)
 from config import ADMIN_IDS, ALLOWED_IDS, TELEGRAM_BOT_TOKEN
 from db import get_conn, init_db
 from sync import run_sync
@@ -949,6 +954,10 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
     today_str = date.today().strftime("%d.%m.%Y")
     sent = 0
 
+    # 2026-10-08 (Toshkent) dan: umumiy BALL jadvali O'RNIGA — AKSIYA jadvali
+    report_day = aksiya_jadval.tashkent_today() if aksiya_jadval else None
+    use_aksiya = bool(aksiya_jadval and aksiya_jadval.is_active(report_day))
+
     async def send_section(header: str, group: list) -> int:
         """Bo'lim sarlavhasi + har agent uchun PNG kartochka (caption bilan)."""
         if not group:
@@ -1018,26 +1027,52 @@ async def send_agent_cards_to_group(app: Application, chat_id: int = None) -> in
         except Exception as exc:
             logger.error("Ball jadvali (%s) xatosi: %s", category, exc)
 
+    async def send_aksiya_image(category: str) -> None:
+        try:
+            png = aksiya_jadval.render_aksiya_table(category, report_day)
+            if not png:
+                logger.info("Aksiya jadvali (%s) — ma'lumot yo'q", category)
+                return
+            caption = (f"<b>AKSIYA JADVALI</b>  ·  {aksiya_jadval.LABELS[category]}  ·  "
+                       f"📅 {report_day.strftime('%d.%m.%Y')}")
+            await _send_with_retry(
+                lambda: app.bot.send_photo(
+                    chat_id, photo=png, caption=caption,
+                    parse_mode=ParseMode.HTML,
+                ),
+                f"aksiya jadvali ({category})",
+            )
+            await asyncio.sleep(1.2)
+        except Exception as exc:
+            logger.error("Aksiya jadvali (%s) xatosi: %s", category, exc)
+
+    async def send_general_table(category: str, label: str) -> None:
+        if use_aksiya:
+            await send_aksiya_image(category)
+        else:
+            await send_ball_image(category, label)
+
     sent += await send_section(
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏙️ <b>SHAHAR AGENTLARI</b>\n📅 {today_str}\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
         city_agents,
     )
     if city_agents:
-        await send_ball_image("city", "SHAHAR AGENTLARI")
+        await send_general_table("city", "SHAHAR AGENTLARI")
 
     sent += await send_section(
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━\n🏘️ <b>VILOYAT AGENTLARI</b>\n📅 {today_str}\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
         region_agents,
     )
     if region_agents:
-        await send_ball_image("region", "VILOYAT AGENTLARI")
+        await send_general_table("region", "VILOYAT AGENTLARI")
 
     if other_agents:
         sent += await send_section(
             "━━━━━━━━━━━━━━━━━━━━━━━━━━\n❓ <b>BOSHQA AGENTLAR</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━━",
             other_agents,
         )
-    logger.info("Guruhga %d ta agent kartochkasi (PNG) + 2 ta ball jadvali (PNG) yuborildi", sent)
+    logger.info("Guruhga %d ta agent kartochkasi (PNG) + umumiy %s jadvallari yuborildi",
+                sent, "AKSIYA" if use_aksiya else "BALL")
     return sent
 
 

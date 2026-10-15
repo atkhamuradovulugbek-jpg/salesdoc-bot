@@ -1,0 +1,57 @@
+# aksiya.yaml — «300 000 AKSIYA» hisobi (2026-10-06, egasi topshirig'i).
+#
+# HAMMA RAQAM SHU YERDA — kodda hech narsa qattiq yozilmagan.
+# Stavkani, eshikni yoki liga ro'yxatini o'zgartirish uchun faqat shu faylni
+# tahrirlab, botni qayta chiqarish kifoya.
+
+threshold_sum: 300000          # 1 aksiya = har shuncha so'm (butun qismi)
+delivered_status: 3            # Sales Doctor: 3 = Доставлен (yetkazilgan)
+                               # 1=yangi, 2=jarayonda, 4=to'liq vazvrat
+report_time: "19:00"
+timezone: Asia/Tashkent
+recalc_days_back: 3            # har kecha T, T-1, T-2 qayta hisoblanadi
+
+# VAZVRAT: egasi qarori (2026-10-06) — qaytarilgan tovar summadan AYIRILADI.
+# "300 olib 60 qaytardi → 240 → 0 aksiya".
+# Eslatma: bazadagi `total_after_discount` qisman vazvrat AYIRILGAN sof summa,
+# to'liq vazvrat esa status 4 bo'lib yetkazilganlar ichiga kirmaydi.
+subtract_returns: true
+
+leagues:
+  shahar:
+    label: SHAHAR
+    # Hudud ro'yxati — FAQAT zaxira (agent ro'yxatda bo'lmasa, ismining
+    # qavsidan topish uchun). Asosiy manba — agents.yaml dagi `league`.
+    territories: [Yunusobod, Chilonzor, Shayhontohur, Shayxontohur, Uchtepa,
+                  Sergeli, Yashnabod, Bektemir, Olmazor, Yangihayot,
+                  "Mirzo Ulugbek", "Mirzo Ulug'bek", Mirobod, Yakkasaroy]
+    min_units: 10
+    fire_at: 15                # 🔥 belgisi shu sondan
+    # Pog'onalar: eng yuqori MOS kelgani ishlaydi.
+    # rate — bitta aksiya narxi. rate_total/rate_units — aniq kasr
+    # (100000/15 ni 6666.6667 deb yozsak tiyin yo'qoladi).
+    tiers:
+      - {min_n: 10, rate: 5000}
+      - {min_n: 15, rate_total: 100000, rate_units: 15}
+
+  viloyat:
+    label: VILOYAT
+    territories: [Chinoz, "Oqqurg'on", "Quyi Chirchiq", Chirchiq, "Bo'stonliq",
+                  Keles, Qibray, Angren, Olmaliq, "To'ytepa", Yangibozor,
+                  Parkent, "Yangiyo'l", Ohangaron, Bekobod]
+    min_units: 15
+    fire_at: 20
+    tiers:
+      - {min_n: 15, rate_total: 80000, rate_units: 15}
+
+# Sovg'a qatorlari (makaron/jele) — summaga ta'sir qilmasligi kerak.
+# Nazorat ro'yxatida "300k+ buyurtmada sovg'a yo'q" tekshiruvi uchun ham shu.
+gift_keywords: [Makaron, Jele]
+
+# Supervayzer nazorat ro'yxati chegaralari
+big_order_alert: 1500000       # shundan katta buyurtma — tasdiqlash kerak
+undelivered_days: 2            # shuncha kun yetkazilmagan bo'lsa — ro'yxatga
+
+# Hisobga kirmaydiganlar (agent emas)
+excluded_agents: ["Sklad Beshyag'och"]
+excluded_sd_ids: ["d0_73"]
