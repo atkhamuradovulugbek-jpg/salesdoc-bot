@@ -1,0 +1,51 @@
+# Prezentatsiya generatori sozlamalari. Raqamlar bot qoidalaridan (rules.yaml) olinadi;
+# bu yerda faqat prezentatsiyaga xos narsalar.
+
+# Oy oxiri prognozi = davr savdosi × M ÷ o'tgan ish kunlari.
+#   calendar — oyning haqiqiy ish kunlari (yakshanba dam; oktyabr 2026 = 27), bot kartalari bilan bir xil.
+#   son (masalan 26) — oktyabr 1–12 shahar slaydida «26 kun standarti» ishlatilgan edi.
+prognoz_days: calendar
+
+# 300 000 aksiya boshlangan kun (bot: nazorat/aksiya_cards.BUSINESS_START)
+aksiya_start: 2026-10-05
+
+# Haftalik reyting (10 ball) — oktyabr slaydidagi YAKUNIY formula (Cowork, 2026-10-13):
+#   reja    = min(haftalik savdo ÷ (kunlik reja × kunlar) ÷ plan_full, 1) × 4
+#   b10     = min(10 tashrifga buyurtma ÷ b10_full, 1) × 2
+#   aksiya  = min(kunlik o'rtacha aksiya ÷ aks_full, 1) × 2      (aksiyasiz haftada: 8 dan 10 ga keltiriladi)
+#   nol     = max(0, 2 − nol kunlar × 1)   nol kun = savdo < kunlik reja × nol_threshold
+rating:
+  plan_full: 1.5
+  b10_full: 7
+  aks_full: 15
+  nol_threshold: 0.8
+  arrow_step: 0.5        # 2-hafta − 1-hafta ≥ 0.5 → ▲, ≤ −0.5 → ▼, aks holda «=»
+
+# O'rindiq tarixi (ixtiyoriy). Bot faqat o'rindiqning HOZIRGI egasini saqlaydi. O'TGAN davr uchun
+# prezentatsiya yasalayotganda o'rindiq keyinroq yana almashgan bo'lsa, o'sha davrdagi egasini shu
+# yerda yozing (davr oxiri from..to ichida bo'lsa qo'llanadi). Aks holda o'rindiq davr butunicha
+# hisoblanadi va izohda «o'rindiq davrdan keyin almashgan» deb belgilanadi.
+seat_history:
+  d0_99:
+    - {name: Emina, hud: Chirchiq, from: 2026-10-12, to: 2026-10-14}   # 15-oktabrdan Nigina
+
+# Prezentatsiyadagi qisqa ism va hudud (ixtiyoriy). Yo'q bo'lsa — Sales Doctor'dagi to'liq ism
+# va qavs ichidagi hudud olinadi. Kalit — Sales Doctor agent id (sd_id).
+names:
+  d0_51:  [Bahodir, Yunusobod]
+  d0_130: [Abdulaziz, Olmazor]
+  d0_138: [Saodat, Uchtepa]
+  d0_145: [Samiya, Yashnobod]
+  d0_150: [Rajabov, Bektemir]
+  d0_147: [Gulchehra, Sergeli]
+  d0_141: [Jasmina, Chilonzor]
+  d0_144: [Samirbek, "Mirzo Ulug'bek"]
+  d0_153: [Mamatov, Yangihayot]
+  d0_131: [Gulshoda, Shayhontohur]
+  d0_89:  [Rano, "Chinoz+Oqqo'rg'on"]
+  d0_134: [Husniobod, "To'ytepa"]
+  d0_146: [Dildora, Olmaliq]
+  d0_103: [Yulduz, "Yangiyo'l"]
+  d0_151: [Maftuna, Qibray]
+  d0_152: [Farangiz, Yangibozor+Parkent]
+  d0_140: [Ibrohimbek, Angren]

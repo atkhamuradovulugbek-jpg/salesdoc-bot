@@ -1,0 +1,10 @@
+# Qo'lda matnlar (ixtiyoriy). Faqat yozilgan maydonlar almashadi, qolgani avtomatik qoladi.
+#   ./venv/bin/python -m tools.presentation build ... --overrides tools/presentation/overrides.example.yaml
+xulosa:
+  - title: "Hamma o'syapti — liga prognozi +37%"            # 1-karta (o'sish)
+    text: "10 agentdan 9 tasi o'tgan oydan yuqori sur'atda."
+  - {}                                                      # 2-karta (aksiya) — avtomatik
+  - {}                                                      # 3-karta (reyting) — avtomatik
+  - text: "Supervayzer ro'yxatni bersin."                   # 4-karta — faqat matni
+final:
+  f3: "Keyingi majlisda: 3-hafta reyting bahosi + aksiya yangilanadi"

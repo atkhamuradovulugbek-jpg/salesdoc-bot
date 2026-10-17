@@ -10,3 +10,6 @@ bot.db-wal
 nazorat/aksiya.py
 nazorat/config/aksiya.yaml
 nazorat/tests/test_aksiya.py
+
+# Prezentatsiya generatori — faqat lokal (serverga kerak emas)
+tools/
