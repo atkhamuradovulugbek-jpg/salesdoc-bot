@@ -18,7 +18,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 
 load_dotenv(ROOT / ".env")
 
-from webadmin import auth, control, reportdata  # noqa: E402
+from webadmin import auth, control, present, reportdata  # noqa: E402
 
 app = FastAPI(title="Siribom Nazorat", docs_url=None, redoc_url=None)
 
@@ -109,8 +109,9 @@ def _wait_text(seconds: int) -> str:
     return f"{seconds // 60 + (1 if seconds % 60 else 0)} daqiqa"
 
 
-@app.post("/api/login")
-def login(body: LoginBody, request: Request):
+def _password_or_raise(request: Request, given: str) -> None:
+    """Parolni tekshiradi; xato bo'lsa 5-xato blokini qo'llab HTTPException ko'taradi.
+    /api/login va prezentatsiya kirishi BIR xil cheklovni ishlatadi."""
     if not SECRET:
         raise HTTPException(500, "Server sozlanmagan: WEB_PASSWORD muhit o'zgaruvchisi yo'q")
     key = _client_key(request)
@@ -118,14 +119,18 @@ def login(body: LoginBody, request: Request):
     left = _limiter.blocked_for(key)
     if left:
         raise HTTPException(429, f"Bir oz kutish kerak: {_wait_text(left)}.")
-    if not auth.password_ok(SECRET, body.secret):
+    if not auth.password_ok(SECRET, given):
         blocked = _limiter.fail(key)
         if blocked:
             raise HTTPException(429, f"5 marta xato kiritildi. {_wait_text(blocked)} "
                                     f"kutib, qayta urinib ko'ring.")
         raise HTTPException(401, "Parol noto'g'ri")
-
     _limiter.reset(key)
+
+
+@app.post("/api/login")
+def login(body: LoginBody, request: Request):
+    _password_or_raise(request, body.secret)
     return {"token": auth.make_token(SECRET), "weak": auth.is_weak(SECRET),
             "days": auth.TOKEN_DAYS}
 
@@ -307,6 +312,70 @@ def period_reopen(ym: str, authorization: str = Header(default="")):
         raise HTTPException(404, str(e))
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+# ──────────────────────────────────────────
+# PREZENTATSIYALAR (/p/<nom>) — faqat admin, cookie bilan (Safari havolasi uchun)
+# ──────────────────────────────────────────
+
+def _p_ok(request: Request) -> bool:
+    return bool(SECRET) and auth.token_valid(SECRET, request.cookies.get(present.COOKIE, ""))
+
+
+def _p_html(body: str, status: int = 200) -> HTMLResponse:
+    return HTMLResponse(body, status_code=status, headers=present.HEADERS)
+
+
+def _p_login_redirect(nxt: str) -> RedirectResponse:
+    from urllib.parse import quote
+    return RedirectResponse(f"/p/kirish?next={quote(present.safe_next(nxt), safe='/')}",
+                            status_code=303, headers=present.HEADERS)
+
+
+@app.get("/p/kirish")
+def p_login_page(next: str = "/p/"):
+    return _p_html(present.login_page(next))
+
+
+@app.post("/p/kirish")
+def p_login(body: LoginBody, request: Request, authorization: str = Header(default="")):
+    token = authorization[7:] if authorization.startswith("Bearer ") else ""
+    if token:                                    # panel tokeni (avtomatik kirish) — blokka sanalmaydi
+        if not (SECRET and auth.token_valid(SECRET, token)):
+            raise HTTPException(401, "Panel tokeni eskirgan")
+    else:
+        _password_or_raise(request, body.secret)
+        token = auth.make_token(SECRET)
+    resp = JSONResponse({"ok": True}, headers=present.HEADERS)
+    https = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+    resp.set_cookie(present.COOKIE, token, max_age=auth.TOKEN_DAYS * 86400, path=present.PREFIX,
+                    httponly=True, secure=https, samesite="lax")
+    return resp
+
+
+@app.get("/p/chiqish")
+def p_logout():
+    resp = _p_login_redirect("/p/")
+    resp.delete_cookie(present.COOKIE, path=present.PREFIX)
+    return resp
+
+
+@app.get("/p")
+@app.get("/p/")
+def p_list(request: Request):
+    if not _p_ok(request):
+        return _p_login_redirect("/p/")
+    return _p_html(present.list_page(present.listing()))
+
+
+@app.get("/p/{slug}")
+def p_show(slug: str, request: Request):
+    f = present.file_for(slug)
+    if not _p_ok(request):
+        return _p_login_redirect(f"/p/{slug}" if f else "/p/")
+    if f is None:
+        return _p_html("<h1>Topilmadi</h1>", 404)
+    return FileResponse(f, media_type="text/html; charset=utf-8", headers=present.HEADERS)
 
 
 # ──────────────────────────────────────────
