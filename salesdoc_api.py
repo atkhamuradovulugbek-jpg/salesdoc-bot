@@ -104,6 +104,21 @@ class SalesDocClient:
     # Pagination helper
     # ------------------------------------------------------------------
 
+    # Bo'sh yoki takror sahifa shuncha marta qayta so'raladi (1, 2, 4 sek kutib).
+    # 2026-10-24 20:10: Sales Doctor 3-sahifani HTTP 200 bilan BO'SH qaytardi → 5622 o'rniga
+    # 2000 buyurtma keldi, 9–23.10 bazadan o'chib ketdi, agentlarga noto'g'ri oylik ketdi.
+    PAGE_RETRIES = 3
+
+    @staticmethod
+    def _page_items(data, key: str) -> list:
+        result = data.get("result") if isinstance(data, dict) else None
+        items = result.get(key) if isinstance(result, dict) else None
+        return items or []
+
+    @staticmethod
+    def _first_id(items: list):
+        return items[0].get("SD_id") if items and isinstance(items[0], dict) else None
+
     async def _paginate(self, method: str, params: dict) -> list[dict]:
         """Barcha sahifalarni o'qib, birlashtirib qaytaradi."""
         result_key_map = {
@@ -131,19 +146,31 @@ class SalesDocClient:
                 "params": {**params, "limit": LIMIT, "page": page},
             }
             data = await self._post(payload)
-            result = data.get("result") or {}
-            items = result.get(key) or []
+            items = self._page_items(data, key)
+            dup = page > 1 and self._first_id(items) == seen_first_id
+
+            # Bo'sh/takror sahifa — qayta so'raymiz. 1-sahifa haqiqatan bo'sh bo'lsa
+            # (masalan, yakshanba ertalab bugungi buyurtma) ~7 sek yo'qotamiz, xolos.
+            for attempt in range(self.PAGE_RETRIES):
+                if items and not dup:
+                    break
+                wait = 2 ** attempt
+                logger.warning("%s %d-sahifa %s keldi (status=%s) — %s sek kutib qayta so'raymiz",
+                               method, page, "takror" if dup else "bo'sh",
+                               data.get("status") if isinstance(data, dict) else "?", wait)
+                await asyncio.sleep(wait)
+                data = await self._post(payload)
+                items = self._page_items(data, key)
+                dup = page > 1 and self._first_id(items) == seen_first_id
 
             if not items:
                 break
-
-            # Duplicate sahifa tekshiruvi
-            first_id = items[0].get("SD_id") if isinstance(items[0], dict) else None
-            if page > 1 and first_id == seen_first_id:
-                logger.warning("Pagination ishlamadi: %s, %d-sahifa takror keldi", method, page)
-                break
+            if dup:
+                # Sahifalash ishlamayapti — chala ro'yxatni "to'liq" deb qaytarmaymiz
+                raise RuntimeError(f"Sales Doctor sahifalash buzildi: {method} "
+                                   f"{page}-sahifa takror keldi")
             if page == 1:
-                seen_first_id = first_id
+                seen_first_id = self._first_id(items)
 
             all_items.extend(items)
 

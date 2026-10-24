@@ -125,6 +125,20 @@ async def _sync_then(app, job_coro):
         await jobs._admins(app, text="⚠️ Sync band va ma'lumot eski — hisobot yuborilmadi.")
         return
 
+    if isinstance(res, str) and res.startswith("partial"):
+        # Sales Doctor chala javob berdi (24.10.2026 saboqi) — sync eski (to'liq) ma'lumotni
+        # saqlab qoldi. Asosiy botning 20:00 sync'i yangi bo'lsa, hisobot shu bilan ketadi.
+        age = _data_age_min()
+        if age is not None and age <= DATA_FRESH_MIN:
+            logger.warning("Sync chala, lekin ma'lumot yangi (%.0f daq) — hisobot davom etadi", age)
+            await jobs._admins(app, text=f"⚠️ Sales Doctor chala javob berdi — eski ma'lumot "
+                                         f"saqlandi ({age:.0f} daqiqa oldingi), hisobot shu "
+                                         f"ma'lumot bilan yuboriladi.\n{res}")
+            return await job_coro(app)
+        await jobs._admins(app, text=f"⚠️ Sales Doctor chala javob berdi va ma'lumot eski — "
+                                     f"hisobot yuborilmadi.\n{res}")
+        return
+
     if res != "ok":
         logger.error("Sync xato: %s", res)
         await jobs._admins(app, text=f"⚠️ Sync xatosi — hisobot yuborilmadi.\n{res}")

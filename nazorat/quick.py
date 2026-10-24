@@ -128,5 +128,6 @@ async def refresh(reason: str = "manual", force: bool = False) -> tuple[bool, st
         return False, "boshqa yangilash ketyapti"
     if res != "ok":
         logger.warning("Yengil yangilash: %s", res)
-        return False, "xato"
+        # "partial" — Sales Doctor chala javob berdi, sync eski ma'lumotni saqlab qoldi
+        return False, "Sales Doctor chala javob berdi" if res.startswith("partial") else "xato"
     return True, "yangilandi"

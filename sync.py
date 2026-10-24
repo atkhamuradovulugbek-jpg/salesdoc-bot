@@ -62,6 +62,19 @@ def _to_float(v, default: float = 0.0) -> float:
 
 _sync_lock = asyncio.Lock()
 
+# CHALA JAVOB HIMOYASI (2026-10-25). Sales Doctor sahifalardan birini bo'sh qaytarsa,
+# buyurtmalar ro'yxati qisqa keladi (24.10 20:10: 2000/5622) va pastdagi DELETE eski
+# (to'liq) ma'lumotni o'chirib yuboradi — 9–23.10 yo'qolib, agentlarga noto'g'ri oylik
+# ketdi. Yangi soni eskisining PARTIAL_RATIO qismidan kam bo'lsa: oraliq O'CHIRILMAYDI,
+# kelganlari upsert qilinadi, sync "partial" deb belgilanadi (adminga xabar boradi).
+PARTIAL_RATIO = 0.9
+PARTIAL_MIN_OLD = 100     # juda kichik to'plam (bugun rejimi ertalab) tekshirilmaydi
+
+
+def looks_partial(new_count: int, old_count: int) -> bool:
+    """Yangi kelgan buyurtmalar bazadagidan sezilarli kam — javob chala."""
+    return old_count >= PARTIAL_MIN_OLD and new_count < old_count * PARTIAL_RATIO
+
 
 async def run_sync(sync_type: str = "scheduled", progress_cb=None, mode: str = "full") -> str:
     """
@@ -399,11 +412,17 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
             # chiqadi. Faqat yangi buyurtma KELGANDA eskisini almashtiramiz.
             # `debt` rejimida buyurtma ATAYLAB tortilmaydi — bu ogohlantirish emas,
             # aks holda har soatlik qarz tekshiruvi soxta trevoga bo'lib ko'rinardi.
-            if not order_rows and mode != "debt":
+            partial = mode != "debt" and looks_partial(len(order_rows), len(old_ids))
+            if partial:
+                logger.error("⚠️ Buyurtmalar CHALA keldi: %d ta (bazada %d ta, %s—%s) — eski "
+                             "ma'lumot SAQLANADI, faqat kelganlari yangilanadi.",
+                             len(order_rows), len(old_ids), lookback_from, today)
+            elif not order_rows and mode != "debt":
                 logger.warning("⚠️ Buyurtmalar BO'SH qaytdi (%s—%s) — eski ma'lumot SAQLANADI "
                                "(o'chirilmaydi). Sync manbai vaqtincha javob bermagan bo'lishi mumkin.",
                                lookback_from, today)
-            ids_to_clear = set(old_ids) | set(order_sd_ids)
+            # Chala kelganda faqat kelgan buyurtmalarning item'lari almashtiriladi
+            ids_to_clear = set(order_sd_ids) if partial else set(old_ids) | set(order_sd_ids)
             if order_rows and ids_to_clear:
                 ids_list = list(ids_to_clear)
                 CHUNK = 500
@@ -411,7 +430,7 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
                     chunk = ids_list[i:i + CHUNK]
                     placeholders = ",".join("?" * len(chunk))
                     conn.execute(f"DELETE FROM order_items WHERE order_sd_id IN ({placeholders})", chunk)
-            if order_rows and old_ids:
+            if order_rows and old_ids and not partial:
                 conn.execute("DELETE FROM orders WHERE date >= ? AND date <= ?", (lookback_from, today))
                 logger.info("⏏ %d ta eski order o'chirildi (sana: %s — %s)", len(old_ids), lookback_from, today)
 
@@ -467,11 +486,22 @@ async def _run_sync_impl(sync_type: str, progress_cb, mode: str) -> str:
             """, visit_rows)
 
             log_type = f"{sync_type}_{mode}"
+            if partial:
+                status = "partial"
+                note = (f"orders={len(order_rows)}/{len(old_ids)} CHALA — eski saqlandi "
+                        f"(skipped={skipped_no_date})")
+            else:
+                status, note = "ok", f"orders={len(order_rows)} (skipped={skipped_no_date})"
             conn.execute(
                 "INSERT INTO sync_log (run_at, type, status, note) VALUES (?, ?, ?, ?)",
-                (now, log_type, "ok", f"orders={len(order_rows)} (skipped={skipped_no_date})"),
+                (now, log_type, status, note),
             )
 
+        if partial:
+            msg = (f"partial: buyurtmalar chala keldi ({len(order_rows)}/{len(old_ids)}) — "
+                   f"eski ma'lumot saqlandi")
+            logger.warning("⚠️ Sinxronizatsiya CHALA tugadi (%s): %s", mode, msg)
+            return msg
         logger.info("✅ Sinxronizatsiya muvaffaqiyatli tugadi (%s).", mode)
         return "ok"
 
